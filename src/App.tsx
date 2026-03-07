@@ -7,26 +7,24 @@ import { useAuthStore } from './store/useAuthStore';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AppShell } from './components/layout/AppShell';
 
-// Pages (Basic implementations)
+// Pages
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { ClientList } from './pages/clients/ClientList';
 import { ClientDetails } from './pages/clients/ClientDetails';
 import { ServiceCatalog } from './pages/catalog/ServiceCatalog';
 import { Reports } from './pages/reports/Reports';
+import { Settings } from './pages/Settings';
 
 function App() {
   const { setUser, isLoading } = useAuthStore();
 
   useEffect(() => {
-    // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      // Fakes the loading state to stop after first check
       useAuthStore.setState({ isLoading: false });
     });
 
-    // Listen to auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
@@ -43,7 +41,6 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
 
-        {/* Protected Routes inside AppShell */}
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -53,7 +50,7 @@ function App() {
             <Route path="/clients/:id" element={<ClientDetails />} />
             <Route path="/catalog/services" element={<ServiceCatalog />} />
             <Route path="/reports" element={<Reports />} />
-            <Route path="/settings" element={<div className="p-8">Configurações</div>} />
+            <Route path="/settings" element={<Settings />} />
           </Route>
         </Route>
       </Routes>

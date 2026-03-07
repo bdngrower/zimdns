@@ -44,3 +44,13 @@ export interface TenantNetworkOrigin {
     created_at: string;
     updated_at: string;
 }
+
+export interface GlobalSettings {
+    id: string;
+    adguard_api_url?: string;
+    last_connection_status: OriginStatus;
+    last_connection_check_at?: string;
+    last_connection_error?: string;
+    environment: string;
+    updated_at: string;
+}

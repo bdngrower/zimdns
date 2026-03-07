@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Tenant } from '../../types';
-import { ArrowLeft, Settings, ShieldAlert, List, Paintbrush, Network, Server, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Settings, ShieldAlert, List, Paintbrush, Network, Server, RefreshCw, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { BlockSwitches } from './BlockSwitches';
 import { ManualRules } from './ManualRules';
@@ -14,27 +14,58 @@ export function ClientDetails() {
     const [client, setClient] = useState<Tenant | null>(null);
     const [activeTab, setActiveTab] = useState('dashboard');
     const [isLoading, setIsLoading] = useState(true);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+    async function loadClient() {
+        if (!id) return;
+        setIsLoading(true);
+        const { data, error } = await supabase
+            .from('tenants')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (!error && data) {
+            setClient(data);
+        }
+        setIsLoading(false);
+    }
 
     useEffect(() => {
-        async function loadClient() {
-            if (!id) return;
-            setIsLoading(true);
-            const { data, error } = await supabase
-                .from('tenants')
-                .select('*')
-                .eq('id', id)
-                .single();
-
-            if (!error && data) {
-                setClient(data);
-            }
-            setIsLoading(false);
-        }
         loadClient();
     }, [id]);
 
-    if (isLoading) {
-        return <div className="p-8 text-slate-500">Recuperando cliente...</div>;
+    const handleSync = async () => {
+        if (!client) return;
+        setIsSyncing(true);
+        setSyncMessage(null);
+
+        try {
+            const response = await fetch('/api/adguard/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenantId: client.id })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                setSyncMessage({ type: 'success', text: 'Sincronização concluída com sucesso!' });
+                await loadClient(); // Recarrega os dados para pegar o novo status do banco
+            } else {
+                setSyncMessage({ type: 'error', text: result.message || 'Falha ao sincronizar' });
+                await loadClient(); // Recarrega para ver a msg de erro do banco se houver
+            }
+        } catch (error: any) {
+            setSyncMessage({ type: 'error', text: `Erro de rede: ${error.message}` });
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
+    if (isLoading && !client) {
+        return <div className="p-8 text-slate-500 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Recuperando cliente...</div>;
     }
 
     if (!client) {
@@ -144,11 +175,24 @@ export function ClientDetails() {
                                         </p>
                                     </div>
                                 </div>
-                                <button className="mt-4 md:mt-0 flex items-center justify-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">
-                                    <RefreshCw className="h-4 w-4" />
-                                    Sincronizar DNS Agora
+                                <button
+                                    onClick={handleSync}
+                                    disabled={isSyncing}
+                                    className="mt-4 md:mt-0 flex items-center justify-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 disabled:opacity-50"
+                                >
+                                    {isSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                    {isSyncing ? 'Sincronizando...' : 'Sincronizar DNS Agora'}
                                 </button>
                             </div>
+
+                            {syncMessage && (
+                                <div className={`mt-4 p-3 rounded flex flex-row items-center gap-2 text-sm ${syncMessage.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+                                    }`}>
+                                    {syncMessage.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+                                    {syncMessage.text}
+                                </div>
+                            )}
+
                             <p className="text-xs text-slate-500 mt-3 flex items-center gap-1">
                                 O processo de sync envia todas as políticas do tenant listadas neste painel (switches e regras) em formato compatível para os filtros do DNS remoto.
                             </p>
