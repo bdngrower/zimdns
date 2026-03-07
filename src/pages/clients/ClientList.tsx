@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Tenant } from '../../types';
 import { Building2, Search, Plus, MoreVertical } from 'lucide-react';

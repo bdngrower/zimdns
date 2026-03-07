@@ -23,7 +23,7 @@ export interface DnsSyncResponse {
  * Lê as categorias bloqueadas, serviços bloqueados e regras manuais (allowlist/blocklist)
  * e converte para uma lista única de domínios ou sintaxe compatível com AdGuard.
  */
-export async function buildTenantEffectiveRules(tenantId: string) {
+export async function buildTenantEffectiveRules(_tenantId: string) {
     // Lógica futura: 
     // 1. Fetch tenant_block_toggles -> Resolver para block_categories ou service_catalog
     // 2. Resolver domínios (category_domains e service_domains)
@@ -40,19 +40,15 @@ export async function buildTenantEffectiveRules(tenantId: string) {
  * 2. Envia (Push) das regras para a API REST do AdGuard
  */
 export async function pushRulesToAdGuard(tenantId: string, rules: { blocks: string[], allows: string[] }) {
-    const ADGUARD_API_URL = process.env.ADGUARD_API_URL;
-    const ADGUARD_USERNAME = process.env.ADGUARD_USERNAME;
-    const ADGUARD_PASSWORD = process.env.ADGUARD_PASSWORD;
-
-    if (!ADGUARD_API_URL) {
-        throw new Error("Credenciais do AdGuard não configuradas no ambiente do servidor.");
-    }
+    // Lendo process.env no Vite via import.meta.env temporariamente apenas para silenciar warnings 
+    // Em Vercel Serverless genuíno usariamos process.env nativamente (requer configurar Vite SSR/Node)
+    const API_URL = import.meta.env.VITE_ADGUARD_API_URL || '';
 
     // Auth Header: Basic base64(user:pass)
     // Lógica futura via node-fetch / axios:
     // POST ${ADGUARD_API_URL}/control/filtering/rules
 
-    console.log(`Mock: Enviando regras do tenant ${tenantId} para AdGuard...`, rules);
+    console.log(`Mock: API (${API_URL}) - Enviando regras do tenant ${tenantId} para AdGuard...`, rules);
     return true;
 }
 
@@ -101,7 +97,7 @@ export async function syncTenantDnsConfig(tenantId: string): Promise<DnsSyncResp
 /**
  * 4. Obtém o Status real do DNS (opcional se quiser consultar o AdGuard ao vivo)
  */
-export async function getTenantDnsStatus(tenantId: string) {
+export async function getTenantDnsStatus(_tenantId: string) {
     // Lógica de consultar se as regras no AdGuard correspondem ao banco
     return { isSynced: true };
 }
