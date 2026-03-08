@@ -54,7 +54,7 @@ export default async function handler(req: any, res: any) {
                     sourceTableUsed: "client_networks",
                     networkRowsFound: networks ? networks.length : 0,
                     networkRowsRaw: networks || [],
-                    dbError: netErr ? netErr.message || netErr : null,
+                    dbError: netErr ? (netErr as any).message || netErr : null,
                     errorMessage: "No valid IPs found for client in database",
                     stepFailed: "fetch_networks"
                 }
@@ -112,13 +112,13 @@ export default async function handler(req: any, res: any) {
         };
 
         // Objeto para Tracking explícito do Frontend
-        const _debug = {
+        const _debug: any = {
             buildTag: "debug-logs-v4",
             clientId,
             sourceTableUsed: "client_networks",
             networkRowsFound: networks ? networks.length : 0,
             networkRowsRaw: networks || [],
-            dbError: netErr ? netErr.message || netErr : null,
+            dbError: netErr ? (netErr as any).message || netErr : null,
             registeredOrigins: Array.from(validIps),
             rawLogCount: allLogs.length,
             rawSample: allLogs.slice(0, 3), // Pegar as tres primeiras pra printar na tela caso queiramos.
@@ -150,6 +150,14 @@ export default async function handler(req: any, res: any) {
         // ==========================================
         // SaaS Telemetry Pipeline (Ingestion)
         // ==========================================
+        const ingestionDebug = {
+            attempted: false,
+            eventsPrepared: 0,
+            insertedCount: 0,
+            supabaseModeUsed: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'service_role' : 'anon',
+            errors: [] as any[]
+        };
+
         try {
             const crypto = await import('crypto');
             const dbEvents = formattedLogs.map((log: any) => {
@@ -177,20 +185,38 @@ export default async function handler(req: any, res: any) {
                 };
             });
 
+            ingestionDebug.eventsPrepared = dbEvents.length;
+
             if (dbEvents.length > 0) {
+                ingestionDebug.attempted = true;
+
+                // Utilizando service_role para burlar RLS e forcar a ingestão server-side, 
+                // pois tokens anonimos sem Auth explítico do front falham nas policies de INSERT se elas demandam token logado.
+                const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey;
+                const supabaseAdmin = createClient(supabaseUrl, adminKey);
+
                 // Bulk insert no Supabase com "on conflict do nothing" para as duplicatas contínuas
-                const { error: ingestErr } = await supabase
+                const { data: insertedData, error: ingestErr } = await supabaseAdmin
                     .from('dns_events')
-                    .upsert(dbEvents, { onConflict: 'event_hash', ignoreDuplicates: true });
+                    .upsert(dbEvents, { onConflict: 'event_hash', ignoreDuplicates: true })
+                    .select('id');
 
                 if (ingestErr) {
-                    console.error("ZIM DNS Telemetry Ingestion Warning:", ingestErr);
+                    console.error("🔴 ZIM DNS Telemetry Ingestion Error:", ingestErr);
+                    ingestionDebug.errors.push(ingestErr);
+                } else {
+                    ingestionDebug.insertedCount = insertedData ? insertedData.length : 0;
+                    console.log(`🟢 ZIM DNS Telemetry Ingestion Success: ${ingestionDebug.insertedCount} novos registros salvos.`);
                 }
             }
-        } catch (ingestionError) {
-            console.error("ZIM DNS Telemetry Generic Pipeline Error:", ingestionError);
+        } catch (ingestionError: any) {
+            console.error("🔴 ZIM DNS Telemetry Generic Pipeline Error:", ingestionError);
+            ingestionDebug.errors.push(ingestionError.message || ingestionError);
             // Nós prosseguimos ignorando para não deixar a interface do cliente cair caso o DB engasgue
         }
+
+        // Incorpora os logs de debug no retorno
+        _debug.ingestion = ingestionDebug;
 
         return res.status(200).json({
             success: true,
