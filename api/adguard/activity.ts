@@ -32,7 +32,6 @@ export default async function handler(req: any, res: any) {
             .from('client_networks')
             .select('value, resolved_ip, type')
             .eq('client_id', clientId)
-            .eq('is_active', true);
 
         if (netErr) throw new Error("Erro ao buscar origens: " + netErr.message);
 
@@ -48,8 +47,12 @@ export default async function handler(req: any, res: any) {
             return res.status(200).json({
                 success: true,
                 _debug: {
-                    buildTag: "debug-activity-v3",
+                    buildTag: "debug-activity-v4",
                     clientId,
+                    sourceTableUsed: "client_networks",
+                    networkRowsFound: networks ? networks.length : 0,
+                    networkRowsRaw: networks || [],
+                    dbError: typeof netErr !== 'undefined' && netErr ? (netErr as any).message || netErr : null,
                     registeredOrigins: [],
                     rawLogCount: 0,
                     rawSample: [],
@@ -122,8 +125,12 @@ export default async function handler(req: any, res: any) {
 
         // Objeto para Tracking explícito do Frontend
         const _debug = {
-            buildTag: "debug-activity-v3",
+            buildTag: "debug-activity-v4",
             clientId,
+            sourceTableUsed: "client_networks",
+            networkRowsFound: networks ? networks.length : 0,
+            networkRowsRaw: networks || [],
+            dbError: typeof netErr !== 'undefined' && netErr ? (netErr as any).message || netErr : null,
             registeredOrigins: Array.from(validIps),
             rawLogCount: allLogs.length,
             rawSample: allLogs.slice(0, 3), // Pegar as tres primeiras pra printar na tela caso queiramos.

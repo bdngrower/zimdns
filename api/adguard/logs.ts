@@ -32,7 +32,6 @@ export default async function handler(req: any, res: any) {
             .from('client_networks')
             .select('value, resolved_ip, type')
             .eq('client_id', clientId)
-            .eq('is_active', true);
 
         if (netErr) throw new Error("Erro ao buscar origens: " + netErr.message);
 
@@ -50,8 +49,12 @@ export default async function handler(req: any, res: any) {
                 logs: [],
                 message: 'Nenhuma origem de rede válida associada ao cliente.',
                 _debug: {
-                    buildTag: "debug-logs-v3",
+                    buildTag: "debug-logs-v4",
                     clientId,
+                    sourceTableUsed: "client_networks",
+                    networkRowsFound: networks ? networks.length : 0,
+                    networkRowsRaw: networks || [],
+                    dbError: netErr ? netErr.message || netErr : null,
                     errorMessage: "No valid IPs found for client in database",
                     stepFailed: "fetch_networks"
                 }
@@ -82,7 +85,7 @@ export default async function handler(req: any, res: any) {
             const ipMatch = clientStr.match(/\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/);
             if (ipMatch) return ipMatch[0];
 
-            // Fallback velho: (ip) 
+            // Fallback velho: (ip)
             const parenMatch = clientStr.match(/\((.*?)\)/);
             if (parenMatch && parenMatch[1]) {
                 return parenMatch[1].trim();
@@ -110,8 +113,12 @@ export default async function handler(req: any, res: any) {
 
         // Objeto para Tracking explícito do Frontend
         const _debug = {
-            buildTag: "debug-logs-v3",
+            buildTag: "debug-logs-v4",
             clientId,
+            sourceTableUsed: "client_networks",
+            networkRowsFound: networks ? networks.length : 0,
+            networkRowsRaw: networks || [],
+            dbError: netErr ? netErr.message || netErr : null,
             registeredOrigins: Array.from(validIps),
             rawLogCount: allLogs.length,
             rawSample: allLogs.slice(0, 3), // Pegar as tres primeiras pra printar na tela caso queiramos.
