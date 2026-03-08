@@ -147,6 +147,51 @@ export default async function handler(req: any, res: any) {
             };
         });
 
+        // ==========================================
+        // SaaS Telemetry Pipeline (Ingestion)
+        // ==========================================
+        try {
+            const crypto = await import('crypto');
+            const dbEvents = formattedLogs.map((log: any) => {
+                const timestamp = log.time; // O AdGuard já retorna em ISO 8601 string
+                const domain = log.queriedDomain;
+                const source_ip = extractIp(log.client_ip || log.client || '');
+                const client_id = clientId;
+
+                // Hash única do evento baseada nos dados essenciais para previnir dupes no polling de X em X segundos
+                const event_hash = crypto.createHash('sha256')
+                    .update(`${timestamp}-${domain}-${source_ip}-${client_id}`)
+                    .digest('hex');
+
+                return {
+                    timestamp,
+                    client_id,
+                    domain,
+                    query_type: log.queryType,
+                    // O Adguard tem action = 'Filtered' / 'Blocked' ou 'Processed'
+                    action: log.reason === 'NotFiltered' || log.reason === '' ? 'processed' : 'blocked',
+                    rule: log.rule || log.reason || null,
+                    source_ip,
+                    latency_ms: Math.round(parseFloat(log.elapsedMs || 0)),
+                    event_hash
+                };
+            });
+
+            if (dbEvents.length > 0) {
+                // Bulk insert no Supabase com "on conflict do nothing" para as duplicatas contínuas
+                const { error: ingestErr } = await supabase
+                    .from('dns_events')
+                    .upsert(dbEvents, { onConflict: 'event_hash', ignoreDuplicates: true });
+
+                if (ingestErr) {
+                    console.error("ZIM DNS Telemetry Ingestion Warning:", ingestErr);
+                }
+            }
+        } catch (ingestionError) {
+            console.error("ZIM DNS Telemetry Generic Pipeline Error:", ingestionError);
+            // Nós prosseguimos ignorando para não deixar a interface do cliente cair caso o DB engasgue
+        }
+
         return res.status(200).json({
             success: true,
             _debug,

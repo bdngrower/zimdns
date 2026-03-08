@@ -7,8 +7,12 @@ export function Dashboard() {
         clients: 0,
         rules: 0,
         categories: 0,
-        services: 0
+        services: 0,
+        totalQueries24h: 0,
+        totalBlocked24h: 0
     });
+    const [topDomains, setTopDomains] = useState<{ domain: string, count: number }[]>([]);
+
     const [adguardState, setAdguardState] = useState<{
         status: 'loading' | 'success' | 'error';
         connected?: boolean;
@@ -24,24 +28,47 @@ export function Dashboard() {
         async function loadData() {
             setIsLoading(true);
 
-            // Fetch BD
-            const [clientsRes, rulesRes, catRes, svcRes] = await Promise.all([
-                supabase.from('clients').select('id', { count: 'exact', head: true }),
-                supabase.from('manual_rules').select('id', { count: 'exact', head: true }),
-                supabase.from('block_categories').select('id', { count: 'exact', head: true }),
-                supabase.from('service_catalog').select('id', { count: 'exact', head: true })
-            ]);
+            // Fetch DB + Global Stats
+            let clientsCount = 0;
+            let rulesCount = 0;
+
+            try {
+                const [clientsRes, rulesRes] = await Promise.all([
+                    supabase.from('clients').select('id', { count: 'exact', head: true }),
+                    supabase.from('manual_rules').select('id', { count: 'exact', head: true }),
+                ]);
+                clientsCount = clientsRes.count || 0;
+                rulesCount = rulesRes.count || 0;
+            } catch (e) { }
+
+            let tQueries = 0;
+            let tBlocked = 0;
+            let tDomains: any[] = [];
+
+            try {
+                const statsRes = await fetch('/api/adguard/stats_global');
+                const statsData = await statsRes.json();
+                if (statsData.success) {
+                    tQueries = statsData.stats.totalQueries24h;
+                    tBlocked = statsData.stats.totalBlocked24h;
+                    tDomains = statsData.stats.topDomains;
+                }
+            } catch (e) { }
+
 
             setStats({
-                clients: clientsRes.count || 0,
-                rules: rulesRes.count || 0,
-                categories: catRes.count || 0,
-                services: svcRes.count || 0
+                clients: clientsCount,
+                rules: rulesCount,
+                categories: 0,
+                services: 0,
+                totalQueries24h: tQueries,
+                totalBlocked24h: tBlocked
             });
 
+            setTopDomains(tDomains);
             setIsLoading(false);
 
-            // AdGuard Fetch (Independente)
+            // AdGuard Status Fetch (Independente)
             try {
                 const agRes = await fetch('/api/adguard/status');
                 const agData = await agRes.json();
@@ -73,9 +100,9 @@ export function Dashboard() {
 
     const cards = [
         { name: 'Clientes Protegidos', value: stats.clients, icon: Users, iconColor: 'text-indigo-600', bg: 'bg-indigo-50/80', border: 'border-indigo-100' },
-        { name: 'Regras Específicas', value: stats.rules, icon: ShieldAlert, iconColor: 'text-rose-600', bg: 'bg-rose-50/80', border: 'border-rose-100' },
-        { name: 'Catálogo de Ameaças', value: stats.categories, icon: Activity, iconColor: 'text-amber-600', bg: 'bg-amber-50/80', border: 'border-amber-100' },
-        { name: 'Serviços Mapeados', value: stats.services, icon: Globe, iconColor: 'text-emerald-600', bg: 'bg-emerald-50/80', border: 'border-emerald-100' },
+        { name: 'Regras Manuais Ativas', value: stats.rules, icon: ShieldAlert, iconColor: 'text-rose-600', bg: 'bg-rose-50/80', border: 'border-rose-100' },
+        { name: 'Consultas DNS (24h)', value: stats.totalQueries24h.toLocaleString(), icon: Activity, iconColor: 'text-emerald-600', bg: 'bg-emerald-50/80', border: 'border-emerald-100' },
+        { name: 'Bloqueios Atuados (24h)', value: stats.totalBlocked24h.toLocaleString(), icon: Globe, iconColor: 'text-amber-600', bg: 'bg-amber-50/80', border: 'border-amber-100' },
     ];
 
     return (
@@ -176,14 +203,43 @@ export function Dashboard() {
                 </div>
 
                 {/* Top Domínios Bloqueados Contexto */}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-8 flex flex-col items-center justify-center min-h-[300px] text-center shadow-sm">
-                    <div className="mx-auto h-12 w-12 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
-                        <ShieldAlert className="h-5 w-5 text-slate-400" />
-                    </div>
-                    <h3 className="text-sm font-medium text-slate-900">Métricas de Ameaças</h3>
-                    <p className="text-slate-500 mt-2 text-xs max-w-[200px]">
-                        Gráficos de domínios restritos e engajamento das regras de parental control e blacklist surgirão aqui.
-                    </p>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-6 flex flex-col min-h-[300px] shadow-sm">
+                    {topDomains.length > 0 ? (
+                        <>
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="h-10 w-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center shadow-sm">
+                                    <ShieldAlert className="h-5 w-5 text-rose-500" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-semibold text-slate-900">Ameaças Frequentes</h3>
+                                    <p className="text-xs text-slate-500">Top 5 domínios bloqueados (24h)</p>
+                                </div>
+                            </div>
+                            <ul className="space-y-3 flex-1">
+                                {topDomains.map((tp, idx) => (
+                                    <li key={idx} className="flex items-center justify-between group">
+                                        <div className="flex items-center gap-2 overflow-hidden">
+                                            <span className="text-xs font-medium text-slate-400 w-4">{idx + 1}.</span>
+                                            <span className="text-sm font-medium text-slate-700 truncate">{tp.domain}</span>
+                                        </div>
+                                        <span className="inline-flex items-center rounded-md bg-white border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+                                            {tp.count}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center">
+                            <div className="mx-auto h-12 w-12 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
+                                <ShieldAlert className="h-5 w-5 text-slate-400" />
+                            </div>
+                            <h3 className="text-sm font-medium text-slate-900">Métricas de Ameaças</h3>
+                            <p className="text-slate-500 mt-2 text-xs max-w-[200px]">
+                                Gráficos de domínios restritos e engajamento das regras de parental control e blacklist surgirão aqui assim que ingeridos.
+                            </p>
+                        </div>
+                    )}
                 </div>
 
             </div>
