@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Search, Bot, Users, MessageSquare, PlayCircle, ShieldAlert, ChevronDown, ChevronUp, Globe } from 'lucide-react';
+import { Search, Bot, Users, MessageSquare, PlayCircle, ShieldAlert, ChevronDown, ChevronUp, Globe, Loader2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface BlockSwitchesProps {
@@ -24,6 +24,8 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
 
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [syncFeedback, setSyncFeedback] = useState<{ type: 'success' | 'error' | 'syncing'; text: string } | null>(null);
 
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -61,9 +63,38 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
         loadData();
     }, [clientId]);
 
+    async function triggerSync() {
+        setIsSyncing(true);
+        setSyncFeedback({ type: 'syncing', text: 'Sincronizando políticas com o motor DNS...' });
+
+        try {
+            const response = await fetch('/api/adguard/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clientId })
+            });
+            const result = await response.json();
+
+            if (result.success && !result.warning) {
+                setSyncFeedback({ type: 'success', text: 'Política salva e sincronizada com o DNS.' });
+            } else if (result.success && result.warning) {
+                setSyncFeedback({ type: 'success', text: result.message || 'Regras enviadas com aviso parcial.' });
+            } else {
+                setSyncFeedback({ type: 'error', text: result.message || 'Falha ao sincronizar com o AdGuard.' });
+            }
+        } catch (err: any) {
+            setSyncFeedback({ type: 'error', text: `Erro de rede: ${err.message}` });
+        } finally {
+            setIsSyncing(false);
+            // Limpar mensagem de sucesso após 5s
+            setTimeout(() => setSyncFeedback(prev => prev?.type === 'success' ? null : prev), 5000);
+        }
+    }
+
     const handleToggle = async (policyName: string) => {
-        if (isSaving) return;
+        if (isSaving || isSyncing) return;
         setIsSaving(true);
+        setSyncFeedback(null);
 
         const currentlyActive = activeToggles[policyName] || false;
         const newStatus = !currentlyActive;
@@ -85,12 +116,14 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                 });
             }
 
-            // Marca status que precisa sync
-            await supabase.from('clients').update({ sync_status: 'pending' }).eq('id', clientId);
+            setIsSaving(false);
+
+            // Auto-sync com AdGuard
+            await triggerSync();
         } catch (err) {
             console.error('Save failed', err);
             setActiveToggles(prev => ({ ...prev, [policyName]: currentlyActive }));
-        } finally {
+            setSyncFeedback({ type: 'error', text: 'Falha ao salvar política no banco de dados.' });
             setIsSaving(false);
         }
     };
@@ -109,10 +142,7 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                 <div>
                     <h3 className="text-lg font-medium text-slate-900">Switches de Bloqueio</h3>
                     <p className="text-sm text-slate-500">
-                        Ative as políticas para bloquear serviços reais. O sistema compilará os domínios via AdGuard API.
-                    </p>
-                    <p className="text-xs text-orange-600 mt-1 font-medium bg-orange-50 inline-block px-2 py-0.5 rounded-md border border-orange-100">
-                        Após ativar chaves, vá em "Visão Geral e Sync" e force a Sincronia de DNS.
+                        Ative ou desative políticas de bloqueio. As mudanças são sincronizadas automaticamente com o motor DNS.
                     </p>
                 </div>
                 <div className="relative w-full sm:w-64">
@@ -126,6 +156,31 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                     />
                 </div>
             </div>
+
+            {/* Feedback de Sincronização */}
+            {syncFeedback && (
+                <div className={cn(
+                    "mb-6 px-4 py-3 rounded-xl border flex items-center gap-3 text-sm transition-all",
+                    syncFeedback.type === 'success' && 'bg-green-50/50 border-green-200 text-green-800',
+                    syncFeedback.type === 'error' && 'bg-red-50/50 border-red-200 text-red-800',
+                    syncFeedback.type === 'syncing' && 'bg-blue-50/50 border-blue-200 text-blue-800',
+                )}>
+                    {syncFeedback.type === 'syncing' && <Loader2 className="h-4 w-4 animate-spin shrink-0" />}
+                    {syncFeedback.type === 'success' && <CheckCircle2 className="h-4 w-4 shrink-0" />}
+                    {syncFeedback.type === 'error' && <AlertCircle className="h-4 w-4 shrink-0" />}
+                    <span className="leading-relaxed">{syncFeedback.text}</span>
+                    {syncFeedback.type === 'error' && (
+                        <button
+                            onClick={triggerSync}
+                            disabled={isSyncing}
+                            className="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 hover:text-red-900 transition-colors"
+                        >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            Tentar novamente
+                        </button>
+                    )}
+                </div>
+            )}
 
             <div className="space-y-6">
                 {categories.map((category) => {
@@ -160,11 +215,12 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                                 <div className="flex items-center gap-4">
                                     <button
                                         onClick={(e) => { e.stopPropagation(); handleToggle(category); }}
-                                        disabled={isSaving}
+                                        disabled={isSaving || isSyncing}
                                         title={`Ativar bloqueio geral para a classe: ${category}`}
                                         className={cn(
                                             "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2",
-                                            groupIsActive ? "bg-red-500" : "bg-slate-200"
+                                            groupIsActive ? "bg-red-500" : "bg-slate-200",
+                                            (isSaving || isSyncing) && "opacity-50 cursor-not-allowed"
                                         )}
                                     >
                                         <span
@@ -207,10 +263,11 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                                                     </div>
                                                     <button
                                                         onClick={() => handleToggle(child.name)}
-                                                        disabled={isSaving}
+                                                        disabled={isSaving || isSyncing}
                                                         className={cn(
                                                             "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-1",
-                                                            childActive ? "bg-red-400" : "bg-slate-300"
+                                                            childActive ? "bg-red-400" : "bg-slate-300",
+                                                            (isSaving || isSyncing) && "opacity-50 cursor-not-allowed"
                                                         )}
                                                     >
                                                         <span
