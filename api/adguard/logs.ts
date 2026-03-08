@@ -49,7 +49,7 @@ export default async function handler(req: any, res: any) {
         }
 
         const token = Buffer.from(`${adguardUser}:${adguardPass}`).toString('base64');
-        const agRes = await fetch(`${adguardUrl}/control/querylog`, {
+        const agRes = await fetch(`${adguardUrl}/control/querylog?limit=1000`, {
             method: 'GET',
             headers: {
                 'Authorization': `Basic ${token}`,
@@ -65,9 +65,19 @@ export default async function handler(req: any, res: any) {
         const logData = await agRes.json();
         const allLogs = logData.data || [];
 
+        // Helper para extrair o IP do formato "host (IP)"
+        const extractIp = (clientStr: string) => {
+            if (!clientStr) return '';
+            const match = clientStr.match(/\((.*?)\)/);
+            if (match && match[1]) {
+                return match[1].trim();
+            }
+            return clientStr.trim();
+        };
+
         // Filtrar apenas originados pelos IPs do cliente atual
-        // Formato log adguard: "client": "ip"
-        const filteredLogs = allLogs.filter((log: any) => validIps.has(log.client));
+        // Formato log adguard pode ser: "189.55.16.97" ou "bd371061.virtua.com.br (189.55.16.97)"
+        const filteredLogs = allLogs.filter((log: any) => validIps.has(extractIp(log.client)));
 
         return res.status(200).json({
             success: true,

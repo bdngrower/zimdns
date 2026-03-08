@@ -59,7 +59,7 @@ export default async function handler(req: any, res: any) {
         }
 
         const token = Buffer.from(`${adguardUser}:${adguardPass}`).toString('base64');
-        const agRes = await fetch(`${adguardUrl}/control/querylog`, {
+        const agRes = await fetch(`${adguardUrl}/control/querylog?limit=1000`, {
             method: 'GET',
             headers: {
                 'Authorization': `Basic ${token}`,
@@ -75,8 +75,18 @@ export default async function handler(req: any, res: any) {
         const logData = await agRes.json();
         const allLogs = logData.data || [];
 
+        // Helper para extrair o IP do formato "host (IP)"
+        const extractIp = (clientStr: string) => {
+            if (!clientStr) return '';
+            const match = clientStr.match(/\((.*?)\)/);
+            if (match && match[1]) {
+                return match[1].trim();
+            }
+            return clientStr.trim();
+        };
+
         // Filtrar
-        const clientLogs = allLogs.filter((log: any) => validIps.has(log.client));
+        const clientLogs = allLogs.filter((log: any) => validIps.has(extractIp(log.client)));
 
         let lastSeenAt = null;
         let blockedCount = 0;
@@ -87,7 +97,7 @@ export default async function handler(req: any, res: any) {
             lastSeenAt = clientLogs[0].time; // AdGuard normally orders newest first
 
             for (const log of clientLogs) {
-                matchedOrigins.add(log.client);
+                matchedOrigins.add(extractIp(log.client));
                 if (log.reason === 'FilteredBlackList') {
                     blockedCount++;
                     if (!lastBlockedDomain) {
