@@ -19,8 +19,6 @@ export interface Client {
     email?: string;
     phone?: string;
     status: EntityStatus;
-    primary_dns_ip?: string;
-    secondary_dns_ip?: string;
     notes?: string;
     technical_id?: string;
     last_sync_at?: string;
