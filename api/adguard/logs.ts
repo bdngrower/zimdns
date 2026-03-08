@@ -45,7 +45,17 @@ export default async function handler(req: any, res: any) {
         }
 
         if (validIps.size === 0) {
-            return res.status(200).json({ success: true, logs: [], message: 'Nenhuma origem de rede válida associada ao cliente.' });
+            return res.status(200).json({
+                success: true,
+                logs: [],
+                message: 'Nenhuma origem de rede válida associada ao cliente.',
+                _debug: {
+                    buildTag: "debug-logs-v3",
+                    clientId,
+                    errorMessage: "No valid IPs found for client in database",
+                    stepFailed: "fetch_networks"
+                }
+            });
         }
 
         const token = Buffer.from(`${adguardUser}:${adguardPass}`).toString('base64');
@@ -100,12 +110,13 @@ export default async function handler(req: any, res: any) {
 
         // Objeto para Tracking explícito do Frontend
         const _debug = {
+            buildTag: "debug-logs-v3",
             clientId,
             registeredOrigins: Array.from(validIps),
-            rawQuerylogCount: allLogs.length,
-            rawQuerylogSample: allLogs.slice(0, 3), // Pegar as tres primeiras pra printar na tela caso queiramos.
-            extractedIpsSample: allLogs.slice(0, 10).map((l: any) => extractIp(l.client || '')),
-            matchedLogsCount: 0
+            rawLogCount: allLogs.length,
+            rawSample: allLogs.slice(0, 3), // Pegar as tres primeiras pra printar na tela caso queiramos.
+            parsedIps: allLogs.slice(0, 10).map((l: any) => extractIp(l.client || '')),
+            matchedCount: 0
         };
 
         if (allLogs.length > 0) {
@@ -116,7 +127,7 @@ export default async function handler(req: any, res: any) {
         // Filtrar apenas originados pelos IPs do cliente atual
         const filteredLogs = allLogs.filter((log: any) => isClientMatch(log, validIps));
 
-        _debug.matchedLogsCount = filteredLogs.length;
+        _debug.matchedCount = filteredLogs.length;
 
         console.log(` Matches encontrados: ${filteredLogs.length} / ${allLogs.length}`);
 
@@ -130,7 +141,13 @@ export default async function handler(req: any, res: any) {
         console.error('DNS Logs Error:', error);
         return res.status(500).json({
             success: false,
-            message: error?.message || 'Erro interno ao buscar logs'
+            message: error?.message || 'Erro interno ao buscar logs',
+            _debug: {
+                buildTag: "debug-logs-v3",
+                clientId,
+                errorMessage: error?.message || 'Unknown error',
+                stepFailed: "exception_catch"
+            }
         });
     }
 }

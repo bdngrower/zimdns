@@ -49,14 +49,20 @@ export function ClientDetails() {
 
         // Verificar atividade dns
         setIsLoadingActivity(true);
-        fetch(`/api/adguard/activity?clientId=${id}`)
+        fetch(`/api/adguard/activity?clientId=${id}`, { cache: 'no-store' })
             .then(res => res.json())
             .then(data => {
+                console.log("🟠 ZIM DNS Frontend - Raw Activity Response:", data);
+                if (data._debug) {
+                    console.log("🟢 ZIM DNS Frontend - Activity _debug payload:", data._debug);
+                } else {
+                    console.log("🔴 ZIM DNS Frontend - Activity _debug payload MISSING in response.");
+                }
+
                 if (data.success && data.data) {
-                    console.log("🟢 ZIM DNS Frontend - Activity _debug payload:", data._debug || "No debug content received.");
                     setDnsActivity(data.data);
                 } else {
-                    console.warn("🟡 ZIM DNS Frontend - Activity request returned success: false or invalid payload.", data);
+                    console.warn("🟡 ZIM DNS Frontend - Activity request returned success: false or invalid payload.");
                     setDnsActivity({ isActive: false });
                 }
             })

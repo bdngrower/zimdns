@@ -47,6 +47,18 @@ export default async function handler(req: any, res: any) {
         if (validIps.size === 0) {
             return res.status(200).json({
                 success: true,
+                _debug: {
+                    buildTag: "debug-activity-v3",
+                    clientId,
+                    registeredOrigins: [],
+                    rawLogCount: 0,
+                    rawSample: [],
+                    parsedIps: [],
+                    matchedCount: 0,
+                    matchedOrigin: null,
+                    errorMessage: "No valid IPs found for client in database",
+                    stepFailed: "fetch_networks"
+                },
                 data: {
                     isActive: false,
                     lastSeenAt: null,
@@ -110,12 +122,14 @@ export default async function handler(req: any, res: any) {
 
         // Objeto para Tracking explícito do Frontend
         const _debug = {
+            buildTag: "debug-activity-v3",
             clientId,
             registeredOrigins: Array.from(validIps),
-            rawQuerylogCount: allLogs.length,
-            rawQuerylogSample: allLogs.slice(0, 3), // Pegar as tres primeiras pra printar na tela caso queiramos.
-            extractedIpsSample: allLogs.slice(0, 10).map((l: any) => extractIp(l.client || '')),
-            matchedLogsCount: 0
+            rawLogCount: allLogs.length,
+            rawSample: allLogs.slice(0, 3), // Pegar as tres primeiras pra printar na tela caso queiramos.
+            parsedIps: allLogs.slice(0, 10).map((l: any) => extractIp(l.client || '')),
+            matchedCount: 0,
+            matchedOrigin: null as string | null
         };
 
         if (allLogs.length > 0) {
@@ -126,7 +140,8 @@ export default async function handler(req: any, res: any) {
         // Filtrar
         const clientLogs = allLogs.filter((log: any) => isClientMatch(log, validIps));
 
-        _debug.matchedLogsCount = clientLogs.length;
+        _debug.matchedCount = clientLogs.length;
+        if (clientLogs.length > 0) _debug.matchedOrigin = extractIp(clientLogs[0].client);
 
         console.log(` Matches encontrados (Activity): ${clientLogs.length} / ${allLogs.length}`);
 
@@ -167,7 +182,13 @@ export default async function handler(req: any, res: any) {
         console.error('DNS Activity Error:', error);
         return res.status(500).json({
             success: false,
-            message: error?.message || 'Erro interno ao buscar atividade'
+            message: error?.message || 'Erro interno ao buscar atividade',
+            _debug: {
+                buildTag: "debug-activity-v3",
+                clientId,
+                errorMessage: error?.message || 'Unknown error',
+                stepFailed: "exception_catch"
+            }
         });
     }
 }

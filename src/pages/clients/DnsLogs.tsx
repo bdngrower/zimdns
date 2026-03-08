@@ -16,10 +16,17 @@ export function DnsLogs({ clientId }: DnsLogsProps) {
             setIsLoading(true);
             setError(null);
             try {
-                const res = await fetch(`/api/adguard/logs?clientId=${clientId}`);
+                const res = await fetch(`/api/adguard/logs?clientId=${clientId}`, { cache: 'no-store' });
                 const data = await res.json();
+
+                console.log("🟠 ZIM DNS Frontend - Raw Logs Response:", data);
+                if (data._debug) {
+                    console.log("🟢 ZIM DNS Frontend - Logs _debug payload:", data._debug);
+                } else {
+                    console.log("🔴 ZIM DNS Frontend - Logs _debug payload MISSING in response.");
+                }
+
                 if (data.success) {
-                    console.log("🟢 ZIM DNS Frontend - Logs _debug payload:", data._debug || "No debug payload received.");
                     setLogs(data.logs || []);
                 } else {
                     setError(data.message || 'Erro ao carregar logs');
