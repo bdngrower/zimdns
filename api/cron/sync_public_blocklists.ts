@@ -20,6 +20,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
+    const startTime = new Date();
 
     try {
         const { data: sources, error: srcErr } = await supabase
@@ -34,9 +35,17 @@ export default async function handler(req: any, res: any) {
 
         const consolidatedDomains = new Map<string, string>(); // domain -> source_id
 
+        // Logs para o JSON final
+        let totalRead = 0;
+        let totalValid = 0;
+
         for (const source of sources) {
+            let sourceRead = 0;
+            let sourceValid = 0;
+
             try {
                 console.log(`[Public Blocklist] Fetching ${source.name} from ${source.url} ...`);
+                const startFetch = Date.now();
                 const response = await fetch(source.url);
                 if (!response.ok) {
                     console.error(`[Public Blocklist] Falha HTTP ao baixar ${source.name} (${response.status})`);
@@ -45,8 +54,8 @@ export default async function handler(req: any, res: any) {
                 const text = await response.text();
                 const lines = text.split('\n');
 
-                let count = 0;
                 for (let line of lines) {
+                    sourceRead++;
                     line = line.trim();
                     // Ignora comentários, vazios e localhost (padrão em arquivos HOSTS)
                     if (!line || line.startsWith('#') || line.startsWith('!')) continue;
@@ -60,17 +69,26 @@ export default async function handler(req: any, res: any) {
                         domain = parts[0];
                     }
 
-                    // Limpa sintaxe típica do AdGuard seletivo explícito (||domain^)
-                    domain = domain.replace(/^\|\|/, '').replace(/\^$/, '');
+                    // Normalização Rigorosa:
+                    // 1. Remove formatação AdGuard explícita ex: ||domain^
+                    // 2. Remove curingas globais redundantes que quebram o AdGuard exportador ex: *.dominio.com para virar só dominio.com
+                    domain = domain.replace(/^\|\|/, '')
+                        .replace(/\^$/, '')
+                        .replace(/^\*\./, ''); // <--- REMOVE wildcard explicit prefix
 
                     if (domain && domain !== 'localhost' && domain.includes('.')) {
+                        // Se bater duplicado entre duas listas, o Set (.has) rejeita
                         if (!consolidatedDomains.has(domain)) {
                             consolidatedDomains.set(domain, source.id);
-                            count++;
+                            sourceValid++;
                         }
                     }
                 }
-                console.log(`[Public Blocklist] Fonte ${source.name} extraída: ${count} domínios válidos únicos.`);
+
+                totalRead += sourceRead;
+                totalValid += sourceValid;
+
+                console.log(`[Public Blocklist] Fonte ${source.name} finalizada. Lidos: ${sourceRead} | Válidos e Únicos: ${sourceValid}. Took: ${Date.now() - startFetch}ms`);
 
                 // Marca o tracking
                 await supabase.from('blocklist_sources').update({ last_sync: new Date().toISOString() }).eq('id', source.id);
@@ -88,6 +106,9 @@ export default async function handler(req: any, res: any) {
 
         const CHUNK_SIZE = 1000;
         let insertedTotal = 0;
+        let dbErrors = 0;
+
+        const startInsert = Date.now();
 
         for (let i = 0; i < domainsArray.length; i += CHUNK_SIZE) {
             const chunk = domainsArray.slice(i, i + CHUNK_SIZE);
@@ -97,26 +118,22 @@ export default async function handler(req: any, res: any) {
 
             if (insErr) {
                 console.error(`[Public Blocklist] Erro no chunk offset ${i}:`, insErr);
+                dbErrors++;
             } else {
                 insertedTotal += chunk.length;
             }
-
-            // Opcional throttle se o DB engasgar
-            // await new Promise(r => setTimeout(r, 100));
         }
 
-        // ----------------------------------------------------
-        // Aciona Push Ativo para o AdGuard do Cliente Padrão 
-        // ----------------------------------------------------
-        console.log(`[Public Blocklist] Atualizando AdGuard Engine via Add_URL config...`);
-        // Aqui nós faremos trigger para todos os edges, a grosso modo acionaremos o endpoint `sync.ts` caso haja necessidade
-        // Mas o correto para lists abertas é criar a URI /api/adguard/export_blocklist e registrar como FilterUrl no AdGuard
-        // Para simplificar, assumimos que o Firewall faz GET na URL e o CRON apenas prepara o DB.
-
         return res.status(200).json({
-            success: true,
-            totalUniqueProcessed: consolidatedDomains.size,
-            totalInsertedOrChecked: insertedTotal
+            started: startTime.toISOString(),
+            finished: new Date().toISOString(),
+            sources_processed: sources.length,
+            domains_read_total: totalRead,
+            domains_normalized_unique: totalValid,
+            domains_inserted_batch: insertedTotal,
+            duplicates_ignored_by_ram: totalRead - totalValid,
+            db_errors: dbErrors,
+            elapsed_ms: Date.now() - startTime.getTime()
         });
 
     } catch (err: any) {
