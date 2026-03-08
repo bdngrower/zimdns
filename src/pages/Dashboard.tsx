@@ -48,12 +48,19 @@ export function Dashboard() {
             try {
                 const statsRes = await fetch('/api/adguard/stats_global');
                 const statsData = await statsRes.json();
+
+                if (statsData._debug) {
+                    console.log("🟢 ZIM DNS Dashboard Global Stats Debug:", statsData._debug);
+                }
+
                 if (statsData.success) {
                     tQueries = statsData.stats.totalQueries24h;
                     tBlocked = statsData.stats.totalBlocked24h;
                     tDomains = statsData.stats.topDomains;
                 }
-            } catch (e) { }
+            } catch (e) {
+                console.error("Dashboard failed to fetch stats_global:", e);
+            }
 
 
             setStats({
