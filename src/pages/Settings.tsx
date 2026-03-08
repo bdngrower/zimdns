@@ -34,41 +34,69 @@ export function Settings() {
         setTestResult(null);
 
         try {
-            // Emulando a chamada para o nosso backend real (Vercel Serverless API)
-            // Em dev, o Vite Proxy enviará isso para o Serverless Dev, em prod cai na Vercel Route
-            const response = await fetch('/api/adguard/test', {
+            const response = await fetch('/api/adguard/status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
             });
 
             const result = await response.json();
-            setTestResult(result);
 
-            // Atualiza global_settings
-            if (settings) {
-                const newStatus = result.success ? 'active' : 'error';
-                const now = new Date().toISOString();
+            // Garantir interface consistente caso seja 200 OK porem o status retornou algo inesperado
+            if (response.ok) {
+                setTestResult({
+                    ...result,
+                    success: true,
+                    message: "Conexão OK"
+                });
 
-                await supabase.from('global_settings')
-                    .update({
-                        last_connection_status: newStatus,
+                if (settings) {
+                    const now = new Date().toISOString();
+                    await supabase.from('global_settings')
+                        .update({
+                            last_connection_status: 'active',
+                            last_connection_check_at: now,
+                            last_connection_error: null
+                        })
+                        .eq('id', settings.id);
+
+                    setSettings(prev => prev ? {
+                        ...prev,
+                        last_connection_status: 'active',
                         last_connection_check_at: now,
-                        last_connection_error: result.success ? null : result.message
-                    })
-                    .eq('id', settings.id);
+                        last_connection_error: undefined
+                    } : null);
+                }
+            } else {
+                setTestResult({
+                    success: false,
+                    message: "Erro de autenticação / conexão",
+                    details: result.message || "Verifique as configurações e variáveis de ambiente.",
+                    ms: result.ms
+                });
 
-                setSettings(prev => prev ? {
-                    ...prev,
-                    last_connection_status: newStatus,
-                    last_connection_check_at: now,
-                    last_connection_error: result.success ? undefined : result.message
-                } : null);
+                if (settings) {
+                    const now = new Date().toISOString();
+                    await supabase.from('global_settings')
+                        .update({
+                            last_connection_status: 'error',
+                            last_connection_check_at: now,
+                            last_connection_error: result.message || 'Erro de rede'
+                        })
+                        .eq('id', settings.id);
+
+                    setSettings(prev => prev ? {
+                        ...prev,
+                        last_connection_status: 'error',
+                        last_connection_check_at: now,
+                        last_connection_error: result.message || 'Erro de rede'
+                    } : null);
+                }
             }
 
         } catch (error: any) {
             setTestResult({
                 success: false,
-                message: "Falha de rede ao contatar a API Serverless.",
+                message: "Erro de autenticação / conexão",
                 details: error.message
             });
         } finally {

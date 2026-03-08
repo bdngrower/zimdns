@@ -1,7 +1,5 @@
-// Vercel functions expect request and response types, but node is loosely typed. Let's fix the lint.
-// We're simulating basic Vercel Request and Response types.
 export default async function handler(req: any, res: any) {
-    if (req.method !== 'POST') {
+    if (req.method !== 'GET' && req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
@@ -19,11 +17,9 @@ export default async function handler(req: any, res: any) {
 
         // Criar o token de Basic Auth
         const authToken = Buffer.from(`${username}:${password}`).toString('base64');
-
         const startTime = Date.now();
 
-        // Faz um request para endpoint leve do AdGuard (ex: `/control/status`)
-        console.log(`Testando conexão com AdGuard em: ${apiUrl}/status`);
+        // Faz o request para o endpoint de status real do AdGuard
         const response = await fetch(`${apiUrl}/status`, {
             method: 'GET',
             headers: {
@@ -45,9 +41,13 @@ export default async function handler(req: any, res: any) {
         }
 
         const data = await response.json();
+
+        // Retornar os parâmetros solicitados: running, dns_addresses, version
         return res.status(200).json({
             success: true,
             message: 'Conectado ao AdGuard Home com sucesso.',
+            running: data.running || false,
+            dns_addresses: data.dns_addresses || ['Desconhecido'],
             version: data.version || 'Desconhecida',
             ms
         });

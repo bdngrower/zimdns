@@ -9,19 +9,25 @@ export function Dashboard() {
         categories: 0,
         services: 0
     });
-    const [globalSettings, setGlobalSettings] = useState<any>(null);
+    const [adguardState, setAdguardState] = useState<{
+        status: 'loading' | 'success' | 'error';
+        version?: string;
+        dnsAddresses?: string[];
+        errorMsg?: string;
+    }>({ status: 'loading' });
+
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        async function loadStats() {
+        async function loadData() {
             setIsLoading(true);
 
-            const [tenantsRes, rulesRes, catRes, svcRes, settingsRes] = await Promise.all([
+            // Fetch BD
+            const [tenantsRes, rulesRes, catRes, svcRes] = await Promise.all([
                 supabase.from('tenants').select('id', { count: 'exact', head: true }),
                 supabase.from('manual_rules').select('id', { count: 'exact', head: true }),
                 supabase.from('block_categories').select('id', { count: 'exact', head: true }),
-                supabase.from('service_catalog').select('id', { count: 'exact', head: true }),
-                supabase.from('global_settings').select('*').limit(1).single()
+                supabase.from('service_catalog').select('id', { count: 'exact', head: true })
             ]);
 
             setStats({
@@ -31,13 +37,34 @@ export function Dashboard() {
                 services: svcRes.count || 0
             });
 
-            if (settingsRes.data) {
-                setGlobalSettings(settingsRes.data);
-            }
-
             setIsLoading(false);
+
+            // AdGuard Fetch (Independente)
+            try {
+                const agRes = await fetch('/api/adguard/status');
+                const agData = await agRes.json();
+
+                if (agRes.ok && agData.success) {
+                    setAdguardState({
+                        status: 'success',
+                        version: agData.version,
+                        dnsAddresses: agData.dns_addresses
+                    });
+                } else {
+                    setAdguardState({
+                        status: 'error',
+                        errorMsg: agData.message || 'Falha ao conectar ao servidor DNS'
+                    });
+                }
+            } catch (err: any) {
+                setAdguardState({
+                    status: 'error',
+                    errorMsg: 'Falha de rede ao verificar status DNS'
+                });
+            }
         }
-        loadStats();
+
+        loadData();
     }, []);
 
     const cards = [
@@ -59,36 +86,43 @@ export function Dashboard() {
             {/* ADGUARD INTEGRATION STATUS CARD */}
             <div className="mb-8 bg-white border border-border shadow-sm rounded-xl overflow-hidden p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-lg border ${globalSettings?.last_connection_status === 'active'
-                            ? 'bg-green-50 text-green-600 border-green-100'
-                            : 'bg-red-50 text-red-600 border-red-100'
+                    <div className={`p-3 rounded-lg border ${adguardState.status === 'success'
+                        ? 'bg-green-50 text-green-600 border-green-100'
+                        : adguardState.status === 'error' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-slate-50 text-slate-400'
                         }`}>
                         <Server className="h-6 w-6" />
                     </div>
                     <div>
                         <h2 className="text-base font-semibold text-slate-900">Integração com Motor DNS</h2>
-                        <p className="text-sm text-slate-500">Motor de Resolução Primária configurado para operação remota em {globalSettings?.environment || 'AWS'}.</p>
+                        <p className="text-sm text-slate-500">Autenticação e status operacional do AdGuard via AWS.</p>
+
+                        {adguardState.status === 'success' && adguardState.dnsAddresses && (
+                            <p className="text-xs text-slate-500 mt-2 font-mono bg-slate-50 p-1.5 rounded inline-block border">
+                                Listener(s): {adguardState.dnsAddresses.join(', ')}
+                            </p>
+                        )}
                     </div>
                 </div>
 
                 <div className="flex flex-col items-start md:items-end">
-                    {isLoading ? (
+                    {adguardState.status === 'loading' ? (
                         <span className="animate-pulse bg-slate-200 h-6 w-32 rounded"></span>
-                    ) : globalSettings?.last_connection_status === 'active' ? (
-                        <div className="inline-flex items-center gap-2">
-                            <CheckCircle2 className="h-5 w-5 text-green-600" />
-                            <span className="font-semibold text-green-700">Verificado & Conectado</span>
+                    ) : adguardState.status === 'success' ? (
+                        <div className="flex flex-col items-end">
+                            <div className="inline-flex items-center gap-2">
+                                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                <span className="font-semibold text-green-700">Conectado ao AdGuard</span>
+                            </div>
+                            <span className="text-xs text-slate-500 mt-1">Servidor AWS ativo (Versão: {adguardState.version})</span>
                         </div>
                     ) : (
-                        <div className="inline-flex items-center gap-2">
-                            <AlertCircle className="h-5 w-5 text-red-600" />
-                            <span className="font-semibold text-red-700">Falha ou Não Executado</span>
+                        <div className="flex flex-col items-end">
+                            <div className="inline-flex items-center gap-2">
+                                <AlertCircle className="h-5 w-5 text-red-600" />
+                                <span className="font-semibold text-red-700">Falha ao conectar ao servidor DNS</span>
+                            </div>
+                            <span className="text-xs text-red-500 font-medium mt-1">{adguardState.errorMsg}</span>
                         </div>
-                    )}
-                    {globalSettings?.last_connection_check_at && (
-                        <p className="text-xs text-slate-400 mt-1">
-                            Última verificação: {new Date(globalSettings.last_connection_check_at).toLocaleString()}
-                        </p>
                     )}
                 </div>
             </div>
@@ -124,8 +158,8 @@ export function Dashboard() {
             <div className="mt-8 rounded-xl border border-border bg-surface p-6 shadow-sm min-h-[300px] flex items-center justify-center">
                 <div className="text-center max-w-sm">
                     <Activity className="mx-auto h-12 w-12 text-slate-300 mb-4" />
-                    <h3 className="text-lg font-medium text-slate-900">Nenhum Registro de Tráfego</h3>
-                    <p className="text-slate-500 mt-2 text-sm">As queries de DNS e os bloqueios em tempo real ainda não foram ingeridos a partir dos clientes. Quando o ambiente estiver em roteamento ativo, os gráficos aparecerão aqui de forma orgânica.</p>
+                    <h3 className="text-lg font-medium text-slate-900">Aguardando tráfego DNS dos clientes.</h3>
+                    <p className="text-slate-500 mt-2 text-sm">A integração com o Log Engine e a captura de gráficos para as requisições geradas pelos clientes acontecerão aqui uma vez que as implantações de rede ganhem volume.</p>
                 </div>
             </div>
         </div>
