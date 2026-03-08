@@ -1,84 +1,27 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Search, Bot, Users, MessageSquare, PlayCircle, MessageCircle, Gamepad2, ShieldAlert, Briefcase, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Bot, Users, MessageSquare, PlayCircle, ShieldAlert, ChevronDown, ChevronUp, Globe } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface BlockSwitchesProps {
     clientId: string;
 }
 
-// Mapeamento visual estático das categorias
-const GROUPS = [
-    {
-        id: '00000000-0000-0000-0000-000000000001',
-        name: 'Inteligência Artificial',
-        icon: Bot,
-        color: 'bg-blue-50 text-blue-600',
-        servicePrefix: 'a0000000-',
-        mainLabel: 'Bloquear todas as IAs'
-    },
-    {
-        id: '00000000-0000-0000-0000-000000000002',
-        name: 'Redes Sociais',
-        icon: Users,
-        color: 'bg-pink-50 text-pink-600',
-        servicePrefix: 'b0000000-',
-        mainLabel: 'Bloquear Redes Sociais'
-    },
-    {
-        id: '00000000-0000-0000-0000-000000000003',
-        name: 'Fóruns e Comunidades',
-        icon: MessageSquare,
-        color: 'bg-orange-50 text-orange-600',
-        servicePrefix: 'c0000000-',
-        mainLabel: 'Bloquear Fóruns'
-    },
-    {
-        id: '00000000-0000-0000-0000-000000000004',
-        name: 'Vídeo e Streaming',
-        icon: PlayCircle,
-        color: 'bg-red-50 text-red-600',
-        servicePrefix: 'd0000000-',
-        mainLabel: 'Bloquear Streaming'
-    },
-    {
-        id: '00000000-0000-0000-0000-000000000005',
-        name: 'Mensageria e Comunicação',
-        icon: MessageCircle,
-        color: 'bg-green-50 text-green-600',
-        servicePrefix: 'e0000000-',
-        mainLabel: 'Bloquear Mensageiros'
-    },
-    {
-        id: '00000000-0000-0000-0000-000000000006',
-        name: 'Jogos e Entretenimento',
-        icon: Gamepad2,
-        color: 'bg-purple-50 text-purple-600',
-        servicePrefix: 'f0000000-',
-        mainLabel: 'Bloquear Jogos'
-    },
-    {
-        id: '00000000-0000-0000-0000-000000000007',
-        name: 'Segurança e Conteúdo Sensível',
-        icon: ShieldAlert,
-        color: 'bg-red-50 text-red-600',
-        customChildCategories: ['11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '55555555-5555-5555-5555-555555555555'],
-        mainLabel: 'Bloqueio de Segurança Máxima'
-    },
-    {
-        id: '00000000-0000-0000-0000-000000000008',
-        name: 'Produtividade corporativa',
-        icon: Briefcase,
-        color: 'bg-slate-50 text-slate-600',
-        servicePrefix: 'none',
-        mainLabel: 'Bloquear ferramentas não homologadas'
-    }
-];
+// Estilos visuais auxiliares pras categorias conhecidas
+const CATEGORY_UI: Record<string, any> = {
+    'IA': { icon: Bot, color: 'bg-blue-50 text-blue-600', mainLabel: 'Bloquear todas as IAs' },
+    'Redes sociais': { icon: Users, color: 'bg-pink-50 text-pink-600', mainLabel: 'Bloquear Redes Sociais' },
+    'Fóruns e comunidades': { icon: MessageSquare, color: 'bg-orange-50 text-orange-600', mainLabel: 'Bloquear Fóruns' },
+    'Streaming': { icon: PlayCircle, color: 'bg-red-50 text-red-600', mainLabel: 'Bloquear Streaming' },
+    'Outros bloqueios': { icon: ShieldAlert, color: 'bg-slate-50 text-slate-800', mainLabel: 'Bloquear Segurança/Proxies' }
+};
+const DEFAULT_UI = { icon: Globe, color: 'bg-indigo-50 text-indigo-600', mainLabel: 'Bloqueios desta classe' };
 
 export function BlockSwitches({ clientId }: BlockSwitchesProps) {
-    const [categories, setCategories] = useState<any[]>([]);
     const [services, setServices] = useState<any[]>([]);
+    const [categories, setCategories] = useState<string[]>([]);
     const [activeToggles, setActiveToggles] = useState<Record<string, boolean>>({});
+
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -89,70 +32,72 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
         async function loadData() {
             setIsLoading(true);
 
-            const [catsRes, servsRes, togglesRes] = await Promise.all([
-                supabase.from('block_categories').select('*'),
-                supabase.from('service_catalog').select('*'),
-                supabase.from('client_policies').select('*').eq('client_id', clientId)
+            const [servsRes, togglesRes] = await Promise.all([
+                supabase.from('service_catalog').select('*').order('name'),
+                supabase.from('client_policies').select('*').eq('client_id', clientId).eq('enabled', true)
             ]);
 
-            if (catsRes.data) setCategories(catsRes.data);
-            if (servsRes.data) setServices(servsRes.data);
+            if (servsRes.data) {
+                setServices(servsRes.data);
+                const uniqueCats = Array.from(new Set(servsRes.data.map(s => s.category)));
+                setCategories(uniqueCats as string[]);
+
+                // Expandir as 4 primeiras
+                const initialExpanded: Record<string, boolean> = {};
+                uniqueCats.slice(0, 4).forEach((c: any) => initialExpanded[c] = true);
+                setExpandedGroups(initialExpanded);
+            }
 
             if (togglesRes.data) {
                 const toggleMap: Record<string, boolean> = {};
                 togglesRes.data.forEach(t => {
-                    toggleMap[t.target_id] = t.status === 'active';
+                    toggleMap[t.policy_name] = true;
                 });
                 setActiveToggles(toggleMap);
             }
-
-            // Expandir os 4 primeiros grupos por padrão
-            const initialExpanded: Record<string, boolean> = {};
-            GROUPS.slice(0, 4).forEach(g => initialExpanded[g.id] = true);
-            setExpandedGroups(initialExpanded);
 
             setIsLoading(false);
         }
         loadData();
     }, [clientId]);
 
-    const handleToggle = async (targetId: string, type: 'category' | 'service') => {
+    const handleToggle = async (policyName: string) => {
         if (isSaving) return;
         setIsSaving(true);
 
-        const currentlyActive = activeToggles[targetId] || false;
+        const currentlyActive = activeToggles[policyName] || false;
         const newStatus = !currentlyActive;
 
-        setActiveToggles(prev => ({ ...prev, [targetId]: newStatus }));
+        setActiveToggles(prev => ({ ...prev, [policyName]: newStatus }));
 
         try {
+            // Delete safely because there isn't a robust unique constraint on (client_id, policy_name)
+            await supabase.from('client_policies')
+                .delete()
+                .eq('client_id', clientId)
+                .eq('policy_name', policyName);
+
             if (newStatus) {
-                await supabase.from('client_policies').upsert({
+                await supabase.from('client_policies').insert({
                     client_id: clientId,
-                    type,
-                    target_id: targetId,
-                    status: 'active'
-                }, { onConflict: 'client_id, type, target_id' });
-            } else {
-                await supabase.from('client_policies').delete()
-                    .eq('client_id', clientId)
-                    .eq('target_id', targetId);
+                    policy_name: policyName,
+                    enabled: true
+                });
             }
         } catch (err) {
-            console.error(err);
-            setActiveToggles(prev => ({ ...prev, [targetId]: currentlyActive }));
+            console.error('Save failed', err);
+            setActiveToggles(prev => ({ ...prev, [policyName]: currentlyActive }));
         } finally {
             setIsSaving(false);
         }
     };
 
-    const toggleGroupExpand = (groupId: string) => {
-        setExpandedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));
+    const toggleGroupExpand = (cat: string) => {
+        setExpandedGroups(prev => ({ ...prev, [cat]: !prev[cat] }));
     };
 
-    if (isLoading) return <div className="py-8 text-center text-slate-500">Carregando catálogo de bloqueios...</div>;
+    if (isLoading) return <div className="py-8 text-center text-slate-500">Carregando catálogo de bloqueios DNS...</div>;
 
-    // Filtro unificado
     const q = searchQuery.toLowerCase();
 
     return (
@@ -161,7 +106,7 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                 <div>
                     <h3 className="text-lg font-medium text-slate-900">Switches de Bloqueio</h3>
                     <p className="text-sm text-slate-500">
-                        Ative os switches para bloquear facilmente serviços populares ou categorias inteiras no motor DNS.
+                        Ative as políticas para bloquear serviços reais. O sistema processará os domínios via AdGuard API.
                     </p>
                 </div>
                 <div className="relative w-full sm:w-64">
@@ -171,54 +116,48 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                         placeholder="Buscar serviço..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-4 py-2 bg-white border border-border rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                        className="w-full pl-9 pr-4 py-2 bg-white border border-border rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                     />
                 </div>
             </div>
 
             <div className="space-y-6">
-                {GROUPS.map((group) => {
-                    const groupIsActive = activeToggles[group.id] || false;
-                    const GroupIcon = group.icon;
-                    const isExpanded = expandedGroups[group.id] || false;
+                {categories.map((category) => {
+                    const groupUi = CATEGORY_UI[category] || DEFAULT_UI;
+                    const GroupIcon = groupUi.icon;
+                    const groupIsActive = activeToggles[category] || false;
+                    const isExpanded = expandedGroups[category] || false;
 
-                    // Filtrar serviços filhos
-                    const childServices = services.filter(s => s.id.startsWith(group.servicePrefix));
-                    const childCategories = categories.filter(c => group.customChildCategories?.includes(c.id));
-
-                    const allChildren = [...childServices.map(s => ({ ...s, type: 'service' as const })), ...childCategories.map(c => ({ ...c, type: 'category' as const }))];
-
-                    const filteredChildren = allChildren.filter(child =>
+                    const childServices = services.filter(s => s.category === category);
+                    const filteredChildren = childServices.filter(child =>
                         !q || child.name.toLowerCase().includes(q) || (child.description && child.description.toLowerCase().includes(q))
                     );
 
-                    // Se estiver buscando e não houver filhos compatíveis, esconder o grupo inteiro
-                    if (q && filteredChildren.length === 0 && !group.name.toLowerCase().includes(q)) return null;
+                    if (q && filteredChildren.length === 0 && !category.toLowerCase().includes(q)) return null;
 
-                    const displayChildren = q ? filteredChildren : allChildren;
+                    const displayChildren = q ? filteredChildren : childServices;
 
                     return (
-                        <div key={group.id} className="bg-white border text-left border-border rounded-xl shadow-sm overflow-hidden">
+                        <div key={category} className="bg-white border text-left border-border rounded-xl shadow-sm overflow-hidden">
                             {/* Card de Header do Grupo */}
                             <div className="p-4 bg-slate-50/50 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
-                                onClick={() => toggleGroupExpand(group.id)}>
+                                onClick={() => toggleGroupExpand(category)}>
                                 <div className="flex items-center gap-4">
-                                    <div className={cn("p-2.5 rounded-lg", group.color)}>
+                                    <div className={cn("p-2.5 rounded-lg", groupUi.color)}>
                                         <GroupIcon className="h-5 w-5" />
                                     </div>
                                     <div>
-                                        <h4 className="font-semibold text-slate-900 text-base">{group.name}</h4>
-                                        <p className="text-sm text-slate-500">{group.mainLabel}</p>
+                                        <h4 className="font-semibold text-slate-900 text-base">{category}</h4>
+                                        <p className="text-sm text-slate-500">{groupUi.mainLabel}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                    {/* Toggle do Mestre (Bloqueia TUDO do grupo se ativado - a UI marca, o backend que se vira c/ a lógica. Nós salvamos a category!) */}
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); handleToggle(group.id, 'category'); }}
+                                        onClick={(e) => { e.stopPropagation(); handleToggle(category); }}
                                         disabled={isSaving}
-                                        title="Ativar bloqueio geral deste grupo"
+                                        title={`Ativar bloqueio geral para a classe: ${category}`}
                                         className={cn(
-                                            "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2",
+                                            "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2",
                                             groupIsActive ? "bg-red-500" : "bg-slate-200"
                                         )}
                                     >
@@ -236,25 +175,23 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                                 </div>
                             </div>
 
-                            {/* Filhos granulares */}
+                            {/* Filhos granulares (Serviços) */}
                             {isExpanded && displayChildren.length > 0 && (
                                 <div className="border-t border-slate-100 bg-white p-4">
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                         {displayChildren.map(child => {
-                                            const childActive = activeToggles[child.id] || false;
-                                            // Se o pai tá ativo, ele já bloqueia. Vamos dar um estilo disabled mas visual de "ON"? 
-                                            // Vamos manter simples: operam independente, backend junta lógica
+                                            const childActive = activeToggles[child.name] || false;
                                             return (
-                                                <div key={child.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-slate-200 bg-slate-50/50">
+                                                <div key={child.name} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-slate-200 bg-slate-50/50 transition-colors">
                                                     <div className="flex-1 pr-3">
                                                         <h5 className="font-medium text-slate-800 text-sm">{child.name}</h5>
-                                                        <p className="text-xs text-slate-500 mt-0.5 max-w-[180px] truncate">{child.description}</p>
+                                                        <p className="text-xs text-slate-500 mt-0.5 max-w-[180px] truncate" title={child.description}>{child.description}</p>
                                                     </div>
                                                     <button
-                                                        onClick={() => handleToggle(child.id, child.type)}
+                                                        onClick={() => handleToggle(child.name)}
                                                         disabled={isSaving}
                                                         className={cn(
-                                                            "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-1",
+                                                            "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-1",
                                                             childActive ? "bg-red-400" : "bg-slate-300"
                                                         )}
                                                     >
@@ -275,7 +212,7 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
 
                             {isExpanded && displayChildren.length === 0 && (
                                 <div className="border-t border-slate-100 bg-white p-4 text-sm text-slate-500 text-center">
-                                    Nenhum serviço mapeado para este grupo ainda.
+                                    Nenhum serviço mapeado para esta categoria encontrado.
                                 </div>
                             )}
                         </div>

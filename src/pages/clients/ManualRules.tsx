@@ -37,8 +37,9 @@ export function ManualRules({ clientId }: ManualRulesProps) {
         const { error } = await supabase.from('manual_rules').insert({
             client_id: clientId,
             domain: newDomain,
-            action: newAction,
+            type: newAction,
             notes: newNotes,
+            is_active: true
         });
 
         if (!error) {
@@ -138,7 +139,7 @@ export function ManualRules({ clientId }: ManualRulesProps) {
                                 <tr key={rule.id}>
                                     <td className="px-4 py-3 text-sm font-medium text-slate-900">{rule.domain}</td>
                                     <td className="px-4 py-3 text-sm">
-                                        {rule.action === 'block' ? (
+                                        {rule.type === 'block' ? (
                                             <span className="inline-flex items-center gap-1.5 rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10">
                                                 <ShieldAlert className="h-3.5 w-3.5" /> Bloquear
                                             </span>
