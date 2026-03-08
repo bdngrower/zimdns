@@ -4,10 +4,10 @@ ZIM DNS Manager é um painel SaaS multi-tenant desenvolvido com React, Vite e Su
 
 ## 🚀 Tecnologias
 
-- **Frontend:** React 18, TypeScript, Tailwind CSS v4, Lucide React, Zustand, React Hook Form + Zod.
-- **Backend (Dados & Auth):** Supabase (PostgreSQL + Row Level Security).
-- **Backend (Integração DNS):** Serverless Functions (Vercel API Routes - *mockadas para implementação futura*).
-- **DNS Engine:** AdGuard Home (Hospedado via AWS/VPS protegido).
+- **Frontend:** React 18, TypeScript, Tailwind CSS v4, Lucide React, Zustand, React Router.
+- **Backend (Dados & Auth):** Supabase (PostgreSQL + Row-Level Security).
+- **Backend (Integração DNS):** Serverless API Route na nuvem.
+- **DNS Engine:** AdGuard Home (Hospedado isoladamente na AWS/VPS em nuvem).
 
 ---
 
@@ -25,10 +25,16 @@ Clone o repositório e instale as dependências:
 npm install
 ```
 
-Crie um arquivo `.env` na raiz do projeto com as suas credenciais do Supabase:
+Crie um arquivo `.env` na raiz do projeto com as suas credenciais do Supabase e do Servidor DNS AdGuard AWS que as rotas *Serverless API* conversarão:
 ```env
+# Banco de Dados
 VITE_SUPABASE_URL=sua_url_aqui
 VITE_SUPABASE_ANON_KEY=sua_key_aqui
+
+# Integração DNS API (AdGuard Home na AWS/VPS)
+ADGUARD_API_URL=http://<IP_DO_SERVIDOR_DNS_AWS>
+ADGUARD_USERNAME=admin
+ADGUARD_PASSWORD=senha
 ```
 
 Inicie o servidor de desenvolvimento:
@@ -51,11 +57,10 @@ Para não expor credenciais do motor DNS no navegador, a aplicação utiliza uma
 3. Uma função serverless lê do banco regras efetivas do provedor, formata para a API do AdGuard e despacha as regras via interface REST. (Protegida por variáveis de ambiente `ADGUARD_API_URL` e senhas da API).
 
 ### Restrições de Segurança (Importante)
-A interface de administração web bruta do AdGuard Home alojado no servidor externo **NUNCA deve ficar exposta publicamente**. Recomendações obrigatórias:
-1. **Firewall / Security Groups:**
-   - Liberar de forma pública apenas as portas de resolução de DNS: `UDP 53`, `TCP 53`, `TCP 853` (se DoT/DoH).
-   - Bloquear porta web do AdGuard (`TCP 80` / `TCP 3000`) para a internet ampla.
-   - Permitir acesso ao painel web do AdGuard apenas a partir dos IPs estáticos do seu servidor do painel Node/Vercel ou VPN dos administradores.
+A interface de administração bruta HTTP (Painel Original) alojado no servidor externo **NUNCA deve ficar exposta publicamente**. O ZIM DNS abstrai isso.
+1. **Firewall Inbound (Security Groups):**
+   - Público Total (0.0.0.0/0): Liberar apenas DNS em `UDP 53`, `TCP 53`, `TCP 853`.
+   - Restrito / Privado: Bloquear as portas WEB (80/3000) de admin do AdGuard para a internet ampla e liberar *somente* para o(s) IP(s) associados ao Worker/Vercel do painel ZIM DNS ou a VPN da Diretoria.
 2. O Painel principal do AdGuard servirá aos administradores somente em casos de trouble-shooting em baixo nível ou manutenção do servidor. Todo onboarding corre via ZIM DNS.
 
 ---

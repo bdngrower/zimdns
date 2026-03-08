@@ -138,21 +138,21 @@ export function Dashboard() {
                     return (
                         <div
                             key={card.name}
-                            className="relative overflow-hidden rounded-xl border border-border bg-surface p-6 shadow-sm"
+                            className="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
                         >
                             <dt>
-                                <div className="absolute rounded-md bg-accent/10 p-3">
-                                    <Icon className="h-6 w-6 text-accent" aria-hidden="true" />
+                                <div className="absolute rounded-lg bg-blue-50 p-3">
+                                    <Icon className="h-6 w-6 text-blue-600" aria-hidden="true" />
                                 </div>
                                 <p className="ml-16 truncate text-sm font-medium text-slate-500">
                                     {card.name}
                                 </p>
                             </dt>
-                            <dd className="ml-16 flex items-baseline pb-1 sm:pb-2">
+                            <dd className="ml-16 flex items-baseline pb-1 sm:pb-2 mt-1">
                                 {isLoading ? (
-                                    <p className="text-2xl font-semibold text-slate-900 animate-pulse bg-slate-200 h-8 w-16 rounded"></p>
+                                    <p className="text-2xl font-bold text-slate-900 animate-pulse bg-slate-100 h-8 w-16 rounded"></p>
                                 ) : (
-                                    <p className="text-2xl font-semibold text-slate-900">{card.value}</p>
+                                    <p className="text-3xl font-bold tracking-tight text-slate-900">{card.value}</p>
                                 )}
                             </dd>
                         </div>
@@ -160,11 +160,16 @@ export function Dashboard() {
                 })}
             </div>
 
-            <div className="mt-8 rounded-xl border border-border bg-surface p-6 shadow-sm min-h-[300px] flex items-center justify-center">
-                <div className="text-center max-w-sm">
-                    <Activity className="mx-auto h-12 w-12 text-slate-300 mb-4" />
-                    <h3 className="text-lg font-medium text-slate-900">Aguardando tráfego DNS dos clientes.</h3>
-                    <p className="text-slate-500 mt-2 text-sm">A integração com o Log Engine e a captura de gráficos para as requisições geradas pelos clientes acontecerão aqui uma vez que as implantações de rede ganhem volume.</p>
+            {/* Empty State Premium Modificado */}
+            <div className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-12 flex items-center justify-center">
+                <div className="text-center max-w-md">
+                    <div className="mx-auto h-16 w-16 bg-white border border-slate-200 rounded-2xl flex items-center justify-center shadow-sm mb-5">
+                        <Activity className="h-8 w-8 text-slate-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900">Aguardando tráfego DNS dos clientes</h3>
+                    <p className="text-slate-500 mt-2 text-sm leading-relaxed">
+                        Os gráficos de top domínios acessados, queries bloqueadas e atividades em tempo real aparecerão aqui automaticamente quando o tráfego ganhar volume.
+                    </p>
                 </div>
             </div>
         </div>

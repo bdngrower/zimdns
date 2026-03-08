@@ -1,100 +1,77 @@
 import { useState } from 'react';
-import { ShieldCheck, ShieldAlert, Clock, Search } from 'lucide-react';
-
-interface MockLog {
-    id: string;
-    timestamp: string;
-    domain: string;
-    client: string;
-    action: 'allowed' | 'blocked';
-    reason?: string;
-}
-
-const mockLogs: MockLog[] = [
-    { id: '1', timestamp: '2026-03-07 14:32:11', domain: 'google-analytics.com', client: 'Empresa Alpha Ltda', action: 'blocked', reason: 'Categoria: Rastreadores' },
-    { id: '2', timestamp: '2026-03-07 14:32:05', domain: 'api.github.com', client: 'Empresa Alpha Ltda', action: 'allowed' },
-    { id: '3', timestamp: '2026-03-07 14:31:59', domain: 'onlyfans.com', client: 'Escola Beta', action: 'blocked', reason: 'Categoria: Conteúdo Adulto' },
-    { id: '4', timestamp: '2026-03-07 14:31:50', domain: 'tiktok.com', client: 'Escola Beta', action: 'blocked', reason: 'Serviço: TikTok' },
-    { id: '5', timestamp: '2026-03-07 14:30:22', domain: 'mail.google.com', client: 'Empresa Alpha Ltda', action: 'allowed' },
-];
+import { Clock, Search, Activity, DatabaseZap } from 'lucide-react';
 
 export function Reports() {
     const [searchTerm, setSearchTerm] = useState('');
 
     return (
-        <div className="p-8">
+        <div className="p-8 max-w-[1600px] mx-auto">
             <div className="mb-8">
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Relatórios de Acesso</h1>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Histórico de Eventos DNS</h1>
                 <p className="mt-1 text-sm text-slate-500">
-                    Visualize logs em tempo real das requisições DNS (Aguardando integração live com o DNS Engine).
+                    Acompanhe em tempo real as consultas, permissões e bloqueios aplicados pelas políticas de seus clientes.
                 </p>
             </div>
 
-            <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden flex flex-col h-[calc(100vh-220px)]">
-                <div className="border-b border-border p-4 flex gap-4 bg-slate-50">
-                    <div className="relative flex-1 max-w-md">
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col h-[calc(100vh-220px)]">
+                {/* Filters */}
+                <div className="border-b border-slate-200 p-4 flex flex-wrap gap-4 bg-slate-50/50">
+                    <div className="relative flex-1 min-w-[280px]">
                         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                             <Search className="h-4 w-4 text-slate-400" />
                         </div>
                         <input
                             type="text"
                             value={searchTerm}
+                            disabled
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="block w-full rounded-md border-0 py-1.5 pl-10 text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-accent sm:text-sm sm:leading-6"
-                            placeholder="Buscar domínios, clientes ou motivos..."
+                            className="block w-full rounded-md border-0 py-2 pl-10 text-slate-500 ring-1 ring-inset ring-slate-200 bg-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6 cursor-not-allowed"
+                            placeholder="Domínios, clientes..."
                         />
                     </div>
-                    <select className="rounded-md border-0 py-1.5 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-accent sm:text-sm">
+                    <select disabled className="rounded-md border-0 py-2 pl-3 pr-10 text-slate-500 ring-1 ring-inset ring-slate-200 bg-slate-100 sm:text-sm cursor-not-allowed hidden sm:block">
                         <option>Todos os Eventos</option>
-                        <option>Apenas Bloqueios</option>
-                        <option>Apenas Permitidos</option>
                     </select>
-                    <select className="rounded-md border-0 py-1.5 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-accent sm:text-sm">
-                        <option>Últimos 15 min</option>
-                        <option>Última hora</option>
+                    <select disabled className="rounded-md border-0 py-2 pl-3 pr-10 text-slate-500 ring-1 ring-inset ring-slate-200 bg-slate-100 sm:text-sm cursor-not-allowed hidden md:block">
                         <option>Hoje</option>
                     </select>
                 </div>
 
-                <div className="flex-1 overflow-auto">
-                    <table className="min-w-full divide-y divide-border">
-                        <thead className="bg-white sticky top-0 z-10 shadow-sm">
+                {/* Data Grid / Empty State */}
+                <div className="flex-1 overflow-auto flex flex-col">
+                    <table className="min-w-full divide-y divide-slate-200">
+                        <thead className="bg-white sticky top-0 z-10 shadow-sm border-b border-slate-200">
                             <tr>
-                                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 sm:pl-6"><div className="flex items-center gap-2"><Clock className="h-4 w-4 text-slate-400" /> Data/Hora</div></th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Cliente</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Domínio</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Ação</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Detalhe / Regra</th>
+                                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider sm:pl-6">
+                                    <div className="flex items-center gap-2"><Clock className="h-4 w-4 text-slate-400" /> Data/Hora</div>
+                                </th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Cliente/Tenant</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Domínio Explorado</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Ação / Desfecho</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-border bg-white">
-                            {mockLogs.map((log) => (
-                                <tr key={log.id} className="hover:bg-slate-50">
-                                    <td className="whitespace-nowrap py-3 pl-4 pr-3 text-sm text-slate-500 sm:pl-6">
-                                        {log.timestamp}
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-3 text-sm text-slate-900 font-medium">
-                                        {log.client}
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-3 text-sm text-slate-500 font-mono">
-                                        {log.domain}
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-3 text-sm">
-                                        {log.action === 'blocked' ? (
-                                            <span className="inline-flex items-center gap-1.5 rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10">
-                                                <ShieldAlert className="h-3.5 w-3.5" /> Bloqueado
+                        <tbody className="divide-y divide-slate-200 bg-slate-50/30">
+                            <tr>
+                                <td colSpan={4} className="py-24">
+                                    <div className="flex flex-col items-center justify-center max-w-md mx-auto text-center px-4">
+                                        <div className="h-20 w-20 bg-blue-50 border border-blue-100 rounded-3xl flex items-center justify-center shadow-sm mb-6 relative">
+                                            <DatabaseZap className="h-10 w-10 text-blue-500" />
+                                            <span className="absolute top-0 right-0 flex h-3 w-3">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                                <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
                                             </span>
-                                        ) : (
-                                            <span className="inline-flex items-center gap-1.5 rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
-                                                <ShieldCheck className="h-3.5 w-3.5" /> Permitido
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-3 text-sm text-slate-500">
-                                        {log.reason || '-'}
-                                    </td>
-                                </tr>
-                            ))}
+                                        </div>
+                                        <h3 className="text-lg font-semibold text-slate-900">Aguardando telemetria DNS</h3>
+                                        <p className="mt-3 text-sm text-slate-500 leading-relaxed">
+                                            Para preservar a performance e focar os recursos no provisionamento, o painel central atualmente armazena logs apenas durante eventos reais validados. Nenhum tráfego ativo gerou ocorrência nos últimos instantes.
+                                        </p>
+                                        <div className="mt-6 flex items-center justify-center gap-2 rounded-lg bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm cursor-default">
+                                            <Activity className="h-4 w-4 text-blue-500" />
+                                            Listeners Ativos
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>

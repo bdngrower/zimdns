@@ -12,6 +12,7 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { ClientList } from './pages/clients/ClientList';
 import { ClientDetails } from './pages/clients/ClientDetails';
+import { ClientForm } from './pages/clients/ClientForm';
 import { ServiceCatalog } from './pages/catalog/ServiceCatalog';
 import { Reports } from './pages/reports/Reports';
 import { Settings } from './pages/Settings';
@@ -47,6 +48,7 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
 
             <Route path="/clients" element={<ClientList />} />
+            <Route path="/clients/new" element={<ClientForm />} />
             <Route path="/clients/:id" element={<ClientDetails />} />
             <Route path="/catalog/services" element={<ServiceCatalog />} />
             <Route path="/reports" element={<Reports />} />
