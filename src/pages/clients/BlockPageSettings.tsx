@@ -2,17 +2,17 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 
 interface BlockPageSettingsProps {
-    tenantId: string;
+    clientId: string;
 }
 
-export function BlockPageSettings({ tenantId }: BlockPageSettingsProps) {
+export function BlockPageSettings({ clientId }: BlockPageSettingsProps) {
     const [config, setConfig] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         async function loadData() {
-            const { data } = await supabase.from('block_pages').select('*').eq('tenant_id', tenantId).single();
+            const { data } = await supabase.from('block_pages').select('*').eq('client_id', clientId).single();
             if (data) {
                 setConfig(data);
             } else {
@@ -29,7 +29,7 @@ export function BlockPageSettings({ tenantId }: BlockPageSettingsProps) {
             setIsLoading(false);
         }
         loadData();
-    }, [tenantId]);
+    }, [clientId]);
 
     const handleChange = (field: string, value: any) => {
         setConfig((prev: any) => ({ ...prev, [field]: value }));
@@ -38,10 +38,10 @@ export function BlockPageSettings({ tenantId }: BlockPageSettingsProps) {
     const handleSave = async () => {
         setIsSaving(true);
         await supabase.from('block_pages').upsert({
-            tenant_id: tenantId,
+            client_id: clientId,
             ...config,
             updated_at: new Date().toISOString()
-        }, { onConflict: 'tenant_id' });
+        }, { onConflict: 'client_id' });
         setIsSaving(false);
     };
 

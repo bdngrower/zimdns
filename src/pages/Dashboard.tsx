@@ -4,7 +4,7 @@ import { Activity, ShieldAlert, Globe, Users, Server, CheckCircle2, AlertCircle 
 
 export function Dashboard() {
     const [stats, setStats] = useState({
-        tenants: 0,
+        clients: 0,
         rules: 0,
         categories: 0,
         services: 0
@@ -25,15 +25,15 @@ export function Dashboard() {
             setIsLoading(true);
 
             // Fetch BD
-            const [tenantsRes, rulesRes, catRes, svcRes] = await Promise.all([
-                supabase.from('tenants').select('id', { count: 'exact', head: true }),
+            const [clientsRes, rulesRes, catRes, svcRes] = await Promise.all([
+                supabase.from('clients').select('id', { count: 'exact', head: true }),
                 supabase.from('manual_rules').select('id', { count: 'exact', head: true }),
                 supabase.from('block_categories').select('id', { count: 'exact', head: true }),
                 supabase.from('service_catalog').select('id', { count: 'exact', head: true })
             ]);
 
             setStats({
-                tenants: tenantsRes.count || 0,
+                clients: clientsRes.count || 0,
                 rules: rulesRes.count || 0,
                 categories: catRes.count || 0,
                 services: svcRes.count || 0
@@ -72,7 +72,7 @@ export function Dashboard() {
     }, []);
 
     const cards = [
-        { name: 'Clientes Ativos', value: stats.tenants, icon: Users, change: 'Total', changeType: 'neutral' },
+        { name: 'Clientes Ativos', value: stats.clients, icon: Users, change: 'Total', changeType: 'neutral' },
         { name: 'Regras Manuais Cadastradas', value: stats.rules, icon: ShieldAlert, change: 'Geral', changeType: 'neutral' },
         { name: 'Categorias de Bloqueio', value: stats.categories, icon: Activity, change: 'Sistema', changeType: 'neutral' },
         { name: 'Serviços Restritos mapeados', value: stats.services, icon: Globe, change: 'Catálogo', changeType: 'neutral' },
@@ -83,7 +83,7 @@ export function Dashboard() {
             <div className="mb-8">
                 <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard Geral</h1>
                 <p className="mt-1 text-sm text-slate-500">
-                    Visão global dos tenants, regras aplicadas e do motor de resolução DNS.
+                    Visão global dos clients, regras aplicadas e do motor de resolução DNS.
                 </p>
             </div>
 

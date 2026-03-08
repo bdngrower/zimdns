@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
-import { Lock } from 'lucide-react';
+
 
 export function Login() {
     const [email, setEmail] = useState('');
@@ -40,9 +40,7 @@ export function Login() {
         <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12 sm:px-6 lg:px-8">
             <div className="w-full max-w-md space-y-8 bg-surface p-8 rounded-2xl shadow-xl border border-border">
                 <div className="text-center">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-accent">
-                        <Lock className="h-6 w-6 text-white" />
-                    </div>
+                    <img src="/logo.png" alt="ZIM DNS Logo" className="mx-auto h-16 w-auto object-contain" />
                     <h2 className="mt-6 text-3xl font-extrabold tracking-tight text-slate-900">
                         ZIM DNS
                     </h2>

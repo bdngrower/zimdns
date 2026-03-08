@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Users, Settings, Database, Activity, ShieldCheck } from 'lucide-react';
+import { Home, Users, Settings, Database, Activity } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 const navItems = [
@@ -17,9 +17,7 @@ export function Sidebar() {
         <div className="flex h-full w-64 flex-col bg-[#0b1121] border-r border-[#1e293b] text-slate-400">
             <div className="flex h-16 shrink-0 items-center px-6 border-b border-white/5">
                 <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-accent bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-900/50">
-                        <ShieldCheck className="h-5 w-5 text-white" />
-                    </div>
+                    <img src="/logo.png" alt="ZIM DNS Logo" className="h-8 w-8 object-contain" />
                     <span className="text-xl font-bold tracking-tight text-white">ZIM DNS</span>
                 </div>
             </div>

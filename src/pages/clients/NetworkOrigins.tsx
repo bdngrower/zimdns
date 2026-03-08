@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import type { TenantNetworkOrigin, OriginType } from '../../types';
+import type { ClientNetwork, OriginType } from '../../types';
 import { Network, Plus, Trash2, Globe, Server, CheckCircle2, XCircle, Clock } from 'lucide-react';
 
 interface NetworkOriginsProps {
-    tenantId: string;
+    clientId: string;
 }
 
-export function NetworkOrigins({ tenantId }: NetworkOriginsProps) {
-    const [origins, setOrigins] = useState<TenantNetworkOrigin[]>([]);
+export function NetworkOrigins({ clientId }: NetworkOriginsProps) {
+    const [origins, setOrigins] = useState<ClientNetwork[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -18,14 +18,14 @@ export function NetworkOrigins({ tenantId }: NetworkOriginsProps) {
 
     useEffect(() => {
         loadOrigins();
-    }, [tenantId]);
+    }, [clientId]);
 
     async function loadOrigins() {
         setIsLoading(true);
         const { data } = await supabase
-            .from('tenant_network_origins')
+            .from('client_networks')
             .select('*')
-            .eq('tenant_id', tenantId)
+            .eq('client_id', clientId)
             .order('created_at', { ascending: true });
 
         if (data) setOrigins(data);
@@ -37,8 +37,8 @@ export function NetworkOrigins({ tenantId }: NetworkOriginsProps) {
         if (!newValue) return;
         setIsSaving(true);
 
-        const { error } = await supabase.from('tenant_network_origins').insert({
-            tenant_id: tenantId,
+        const { error } = await supabase.from('client_networks').insert({
+            client_id: clientId,
             type: newType,
             value: newValue,
             description: newDesc,
@@ -53,7 +53,7 @@ export function NetworkOrigins({ tenantId }: NetworkOriginsProps) {
     }
 
     async function handleDelete(id: string) {
-        const { error } = await supabase.from('tenant_network_origins').delete().eq('id', id);
+        const { error } = await supabase.from('client_networks').delete().eq('id', id);
         if (!error) {
             setOrigins(prev => prev.filter(o => o.id !== id));
         }

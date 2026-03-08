@@ -1,14 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Vercel Severless route para forçar trigger de sincronização de regras de 1 tenant.
+// Vercel Severless route para forçar trigger de sincronização de regras de 1 cliente.
 export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    const { tenantId } = req.body;
-    if (!tenantId) {
-        return res.status(400).json({ error: 'Missing tenantId' });
+    const { clientId } = req.body;
+    if (!clientId) {
+        return res.status(400).json({ error: 'Missing clientId' });
     }
 
     try {
@@ -27,8 +27,8 @@ export default async function handler(req: any, res: any) {
         const adguardUser = process.env.ADGUARD_USERNAME;
         const adguardPass = process.env.ADGUARD_PASSWORD;
 
-        // 1. Simular uma compilação de regras do Tenant
-        // Real-world: supabase.from('manual_rules').select().eq('tenant_id', tenantId)
+        // 1. Simular uma compilação de regras do Cliente
+        // Real-world: supabase.from('manual_rules').select().eq('client_id', clientId)
         const rules = {
             blocks: ['example.com'],
             allows: ['safe.com']
@@ -40,30 +40,30 @@ export default async function handler(req: any, res: any) {
             const token = Buffer.from(`${adguardUser}:${adguardPass}`).toString('base64');
 
             // Chamada Falsa, adaptada para endpoints reais (ex. /control/filtering/set_rules)
-            console.log(`[AdGuard] Sending sync for ${tenantId} via backend. Regras detectadas:`, rules.blocks.length);
+            console.log(`[AdGuard] Sending sync for ${clientId} via backend. Regras detectadas:`, rules.blocks.length);
             const agRes = await fetch(`${adguardUrl}/status`, {
                 headers: { 'Authorization': `Basic ${token}` }
             });
 
             if (!agRes.ok) throw new Error(`Falha no Adguard: HTTP ${agRes.status}`);
         } else {
-            console.log(`[Mock] Sincronização executada mock para o tenant ${tenantId}.`);
+            console.log(`[Mock] Sincronização executada mock para o cliente ${clientId}.`);
         }
 
-        // 3. Atualizar Supabase 'tenants' table -> sync_status: success
+        // 3. Atualizar Supabase 'clients' table -> sync_status: success
         if (supabaseUrl && supabaseUrl !== 'https://fake.supabase') {
             const now = new Date().toISOString();
-            await supabase.from('tenants').update({
+            await supabase.from('clients').update({
                 sync_status: 'success',
                 last_sync_at: now,
                 sync_error_message: null
-            }).eq('id', tenantId);
+            }).eq('id', clientId);
 
             // 4. Inserir log
             await supabase.from('audit_logs').insert({
-                tenant_id: tenantId,
+                client_id: clientId,
                 action: 'SYNC_DNS',
-                entity_type: 'tenant',
+                entity_type: 'client',
                 details: { status: 'success', rulesAplicadas: rules }
             });
         }
@@ -82,10 +82,10 @@ export default async function handler(req: any, res: any) {
             const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
             if (supabaseUrl) {
                 const supabase = createClient(supabaseUrl, supabaseKey);
-                await supabase.from('tenants').update({
+                await supabase.from('clients').update({
                     sync_status: 'error',
                     sync_error_message: error?.message || 'Erro desconhecido'
-                }).eq('id', tenantId);
+                }).eq('id', clientId);
             }
         } catch (e) { }
 

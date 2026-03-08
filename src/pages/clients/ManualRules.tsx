@@ -3,10 +3,10 @@ import { supabase } from '../../lib/supabase';
 import { Plus, Trash2, Globe, ShieldAlert, ShieldCheck } from 'lucide-react';
 
 interface ManualRulesProps {
-    tenantId: string;
+    clientId: string;
 }
 
-export function ManualRules({ tenantId }: ManualRulesProps) {
+export function ManualRules({ clientId }: ManualRulesProps) {
     const [rules, setRules] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -16,14 +16,14 @@ export function ManualRules({ tenantId }: ManualRulesProps) {
 
     useEffect(() => {
         loadRules();
-    }, [tenantId]);
+    }, [clientId]);
 
     async function loadRules() {
         setIsLoading(true);
         const { data } = await supabase
             .from('manual_rules')
             .select('*')
-            .eq('tenant_id', tenantId)
+            .eq('client_id', clientId)
             .order('created_at', { ascending: false });
 
         if (data) setRules(data);
@@ -35,7 +35,7 @@ export function ManualRules({ tenantId }: ManualRulesProps) {
         if (!newDomain) return;
         setIsSaving(true);
         const { error } = await supabase.from('manual_rules').insert({
-            tenant_id: tenantId,
+            client_id: clientId,
             domain: newDomain,
             action: newAction,
             notes: newNotes,

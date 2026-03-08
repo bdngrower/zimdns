@@ -4,7 +4,7 @@ import { Search, Bot, Users, MessageSquare, PlayCircle, MessageCircle, Gamepad2,
 import { cn } from '../../lib/utils';
 
 interface BlockSwitchesProps {
-    tenantId: string;
+    clientId: string;
 }
 
 // Mapeamento visual estático das categorias
@@ -75,7 +75,7 @@ const GROUPS = [
     }
 ];
 
-export function BlockSwitches({ tenantId }: BlockSwitchesProps) {
+export function BlockSwitches({ clientId }: BlockSwitchesProps) {
     const [categories, setCategories] = useState<any[]>([]);
     const [services, setServices] = useState<any[]>([]);
     const [activeToggles, setActiveToggles] = useState<Record<string, boolean>>({});
@@ -92,7 +92,7 @@ export function BlockSwitches({ tenantId }: BlockSwitchesProps) {
             const [catsRes, servsRes, togglesRes] = await Promise.all([
                 supabase.from('block_categories').select('*'),
                 supabase.from('service_catalog').select('*'),
-                supabase.from('tenant_block_toggles').select('*').eq('tenant_id', tenantId)
+                supabase.from('client_policies').select('*').eq('client_id', clientId)
             ]);
 
             if (catsRes.data) setCategories(catsRes.data);
@@ -114,7 +114,7 @@ export function BlockSwitches({ tenantId }: BlockSwitchesProps) {
             setIsLoading(false);
         }
         loadData();
-    }, [tenantId]);
+    }, [clientId]);
 
     const handleToggle = async (targetId: string, type: 'category' | 'service') => {
         if (isSaving) return;
@@ -127,15 +127,15 @@ export function BlockSwitches({ tenantId }: BlockSwitchesProps) {
 
         try {
             if (newStatus) {
-                await supabase.from('tenant_block_toggles').upsert({
-                    tenant_id: tenantId,
+                await supabase.from('client_policies').upsert({
+                    client_id: clientId,
                     type,
                     target_id: targetId,
                     status: 'active'
-                }, { onConflict: 'tenant_id, type, target_id' });
+                }, { onConflict: 'client_id, type, target_id' });
             } else {
-                await supabase.from('tenant_block_toggles').delete()
-                    .eq('tenant_id', tenantId)
+                await supabase.from('client_policies').delete()
+                    .eq('client_id', clientId)
                     .eq('target_id', targetId);
             }
         } catch (err) {

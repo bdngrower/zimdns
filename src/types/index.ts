@@ -12,7 +12,7 @@ export interface Profile {
     updated_at: string;
 }
 
-export interface Tenant {
+export interface Client {
     id: string;
     name: string;
     contact_name?: string;
@@ -30,17 +30,25 @@ export interface Tenant {
     updated_at: string;
 }
 
-export interface TenantNetworkOrigin {
+export interface ClientNetwork {
     id: string;
-    tenant_id: string;
+    client_id: string;
     type: OriginType;
     value: string;
-    resolved_ip?: string;
     description?: string;
+    resolved_ip?: string;
     is_active: boolean;
     last_resolved_at?: string;
     resolution_status?: OriginStatus;
-    notes?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ClientPolicy {
+    id: string;
+    client_id: string;
+    policy_name: string;
+    enabled: boolean;
     created_at: string;
     updated_at: string;
 }

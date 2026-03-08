@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import type { Tenant } from '../../types';
+import type { Client } from '../../types';
 import { ArrowLeft, Settings, ShieldAlert, List, Paintbrush, Network, Server, RefreshCw, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { BlockSwitches } from './BlockSwitches';
@@ -11,7 +11,7 @@ import { NetworkOrigins } from './NetworkOrigins';
 
 export function ClientDetails() {
     const { id } = useParams();
-    const [client, setClient] = useState<Tenant | null>(null);
+    const [client, setClient] = useState<Client | null>(null);
     const [activeTab, setActiveTab] = useState('dashboard');
     const [isLoading, setIsLoading] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -21,7 +21,7 @@ export function ClientDetails() {
         if (!id) return;
         setIsLoading(true);
         const { data, error } = await supabase
-            .from('tenants')
+            .from('clients')
             .select('*')
             .eq('id', id)
             .single();
@@ -45,7 +45,7 @@ export function ClientDetails() {
             const response = await fetch('/api/adguard/sync', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tenantId: client.id })
+                body: JSON.stringify({ clientId: client.id })
             });
 
             const result = await response.json();
@@ -213,7 +213,7 @@ export function ClientDetails() {
 
                             <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/30 p-4">
                                 <p className="text-sm text-blue-800/80 leading-relaxed">
-                                    <span className="font-semibold text-blue-900">Como funciona:</span> O processo de "Forçar Sincronia" empacota as origens de rede deste tenant e suas configurações de bloqueio (Services, Categories, Block Page) enviando-as diretamente para a infraestrutura do AdGuard Serverless em poucos segundos.
+                                    <span className="font-semibold text-blue-900">Como funciona:</span> O processo de "Forçar Sincronia" empacota as origens de rede deste client e suas configurações de bloqueio (Services, Categories, Block Page) enviando-as diretamente para a infraestrutura do AdGuard Serverless em poucos segundos.
                                 </p>
                             </div>
                         </div>
@@ -221,19 +221,19 @@ export function ClientDetails() {
                 )}
 
                 {activeTab === 'network' && (
-                    <NetworkOrigins tenantId={client.id} />
+                    <NetworkOrigins clientId={client.id} />
                 )}
 
                 {activeTab === 'blocks' && (
-                    <BlockSwitches tenantId={client.id} />
+                    <BlockSwitches clientId={client.id} />
                 )}
 
                 {activeTab === 'rules' && (
-                    <ManualRules tenantId={client.id} />
+                    <ManualRules clientId={client.id} />
                 )}
 
                 {activeTab === 'blockpage' && (
-                    <BlockPageSettings tenantId={client.id} />
+                    <BlockPageSettings clientId={client.id} />
                 )}
             </div>
         </div>

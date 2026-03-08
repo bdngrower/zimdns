@@ -1,18 +1,18 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import type { Tenant } from '../../types';
+import type { Client } from '../../types';
 import { Link } from 'react-router-dom';
 import { Building2, Search, Plus, MoreVertical } from 'lucide-react';
 
 export function ClientList() {
-    const [clients, setClients] = useState<Tenant[]>([]);
+    const [clients, setClients] = useState<Client[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         async function loadClients() {
             setIsLoading(true);
             const { data, error } = await supabase
-                .from('tenants')
+                .from('clients')
                 .select('*')
                 .order('name');
 
@@ -90,7 +90,7 @@ export function ClientList() {
                                             </div>
                                             <h3 className="text-base font-semibold text-slate-900">Nenhum cliente cadastrado</h3>
                                             <p className="mt-2 text-sm text-slate-500 leading-relaxed">
-                                                Seu painel ZIM DNS está pronto, porém você ainda não possui um tenant ativo. Cadastre seu primeiro cliente para iniciar a gestão de políticas.
+                                                Seu painel ZIM DNS está pronto, porém você ainda não possui um client ativo. Cadastre seu primeiro cliente para iniciar a gestão de políticas.
                                             </p>
                                             <button
                                                 type="button"

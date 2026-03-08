@@ -46,7 +46,7 @@ export function ServiceCatalog() {
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">Catálogo de Bloqueios</h1>
                     <p className="mt-1 text-sm text-slate-500">
-                        Explore as categorias e serviços globais que podem ser bloqueados na política de cada tenant.
+                        Explore as categorias e serviços globais que podem ser bloqueados na política de cada client.
                     </p>
                 </div>
             </div>

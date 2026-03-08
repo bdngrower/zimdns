@@ -45,7 +45,7 @@ export function Reports() {
                                 <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider sm:pl-6">
                                     <div className="flex items-center gap-2"><Clock className="h-4 w-4 text-slate-400" /> Data/Hora</div>
                                 </th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Cliente/Tenant</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Cliente/Client</th>
                                 <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Domínio Explorado</th>
                                 <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Ação / Desfecho</th>
                             </tr>
