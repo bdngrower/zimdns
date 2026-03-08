@@ -39,15 +39,45 @@ export default async function handler(req: any, res: any) {
         if (qErr) _debug.errors.push({ query: 'totalQueries', error: qErr });
         _debug.totalEventsRead = totalQueries || 0;
 
-        // 2. Total blocked
-        const { count: totalBlocked, error: bErr } = await supabase
+        // 2. Fetch raw events for time-series generation (Limited scale to represent chart)
+        const { data: rawSeriesData, error: seriesErr } = await supabase
             .from('dns_events')
-            .select('*', { count: 'exact', head: true })
-            .eq('action', 'blocked')
-            .gte('timestamp', yesterday.toISOString());
+            .select('timestamp, action')
+            .gte('timestamp', yesterday.toISOString())
+            .order('timestamp', { ascending: true }) // Ascending for chronological charting
+            .limit(5000); // Fetch up to 5k for reasonable memory grouping 
 
-        if (bErr) _debug.errors.push({ query: 'totalBlocked', error: bErr });
-        _debug.blockedEventsRead = totalBlocked || 0;
+        if (seriesErr) _debug.errors.push({ query: 'rawSeriesData', error: seriesErr });
+
+        // Build time-series aggregated by HOUR
+        // Produces array of 24 points: { time: "HH:00", queries: number, blocks: number }
+        const timeSeriesMap: Record<string, { queries: number, blocks: number }> = {};
+
+        // Initialize last 24h array with 0s to guarantee flat chart line
+        for (let i = 23; i >= 0; i--) {
+            const d = new Date();
+            d.setHours(d.getHours() - i);
+            const key = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }).split(':')[0] + ':00';
+            timeSeriesMap[key] = { queries: 0, blocks: 0 };
+        }
+
+        if (rawSeriesData) {
+            rawSeriesData.forEach(ev => {
+                const hourKey = new Date(ev.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }).split(':')[0] + ':00';
+                if (timeSeriesMap[hourKey] !== undefined) {
+                    timeSeriesMap[hourKey].queries++;
+                    if (ev.action === 'blocked') {
+                        timeSeriesMap[hourKey].blocks++;
+                    }
+                }
+            });
+        }
+
+        const chartSeries = Object.entries(timeSeriesMap).map(([time, data]) => ({
+            time,
+            queries: data.queries,
+            blocks: data.blocks
+        }));
 
         // 3. Top blocked domains (Approximated with RPC if it existed, for now using raw data to build a quick summary)
         // Ideal: a database View or RPC. We will fetch recent blocks and group them in memory for this endpoint if no RPC.
@@ -73,13 +103,18 @@ export default async function handler(req: any, res: any) {
                 .slice(0, 5); // top 5
         }
 
+        let totalBlockedCount = 0;
+        chartSeries.forEach(s => totalBlockedCount += s.blocks);
+        _debug.blockedEventsRead = totalBlockedCount;
+
         return res.status(200).json({
             success: true,
             _debug,
             stats: {
                 totalQueries24h: totalQueries || 0,
-                totalBlocked24h: totalBlocked || 0,
-                topDomains
+                totalBlocked24h: totalBlockedCount,
+                topDomains,
+                chartSeries
             }
         });
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Activity, ShieldAlert, Globe, Users, Server, CheckCircle2, AlertCircle } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export function Dashboard() {
     const [stats, setStats] = useState({
@@ -12,6 +13,7 @@ export function Dashboard() {
         totalBlocked24h: 0
     });
     const [topDomains, setTopDomains] = useState<{ domain: string, count: number }[]>([]);
+    const [chartSeries, setChartSeries] = useState<{ time: string, queries: number, blocks: number }[]>([]);
 
     const [adguardState, setAdguardState] = useState<{
         status: 'loading' | 'success' | 'error';
@@ -44,6 +46,7 @@ export function Dashboard() {
             let tQueries = 0;
             let tBlocked = 0;
             let tDomains: any[] = [];
+            let tSeries: any[] = [];
 
             try {
                 const statsRes = await fetch('/api/adguard/stats_global');
@@ -57,6 +60,7 @@ export function Dashboard() {
                     tQueries = statsData.stats.totalQueries24h;
                     tBlocked = statsData.stats.totalBlocked24h;
                     tDomains = statsData.stats.topDomains;
+                    tSeries = statsData.stats.chartSeries || [];
                 }
             } catch (e) {
                 console.error("Dashboard failed to fetch stats_global:", e);
@@ -73,6 +77,7 @@ export function Dashboard() {
             });
 
             setTopDomains(tDomains);
+            setChartSeries(tSeries);
             setIsLoading(false);
 
             // AdGuard Status Fetch (Independente)
@@ -199,14 +204,60 @@ export function Dashboard() {
             <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                 {/* Atividades Recentes / Threat Feed */}
-                <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-8 flex flex-col items-center justify-center min-h-[300px] text-center shadow-sm">
-                    <div className="mx-auto h-16 w-16 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center mb-5">
-                        <Activity className="h-8 w-8 text-slate-400" />
+                <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-8 flex flex-col justify-center min-h-[300px] shadow-sm">
+                    <div className="mb-6 flex items-center justify-between">
+                        <div>
+                            <h3 className="text-base font-semibold text-slate-900">Volume de Tráfego</h3>
+                            <p className="text-sm text-slate-500">Consultas e ameaças mitigadas (últimas 24h)</p>
+                        </div>
+                        <div className="flex gap-4 text-xs font-medium">
+                            <span className="flex items-center gap-1.5 text-slate-600">
+                                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span> Consultas
+                            </span>
+                            <span className="flex items-center gap-1.5 text-slate-600">
+                                <span className="h-2.5 w-2.5 rounded-full bg-rose-500"></span> Bloqueios
+                            </span>
+                        </div>
                     </div>
-                    <h3 className="text-base font-semibold text-slate-900">Aguardando telemetria em tempo real</h3>
-                    <p className="text-slate-500 mt-2 text-sm max-w-sm">
-                        O painel de monitoramento contínuo será populado automaticamente assim que os dispositivos dos clientes iniciarem o tráfego filtrado através do motor DNS.
-                    </p>
+
+                    {chartSeries.length > 0 ? (
+                        <div className="h-64 mt-2">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={chartSeries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <defs>
+                                        <linearGradient id="colorQueries" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                        </linearGradient>
+                                        <linearGradient id="colorBlocks" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.2} />
+                                            <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} minTickGap={30} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                                    <Tooltip
+                                        contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                        itemStyle={{ fontSize: '13px', fontWeight: 500 }}
+                                        labelStyle={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}
+                                    />
+                                    <Area type="monotone" dataKey="queries" name="Consultas" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorQueries)" />
+                                    <Area type="monotone" dataKey="blocks" name="Bloqueios" stroke="#f43f5e" strokeWidth={2} fillOpacity={1} fill="url(#colorBlocks)" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center flex-1 text-center py-6">
+                            <div className="mx-auto h-16 w-16 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center mb-5">
+                                <Activity className="h-8 w-8 text-slate-400" />
+                            </div>
+                            <h3 className="text-base font-semibold text-slate-900">Aguardando telemetria</h3>
+                            <p className="text-slate-500 mt-2 text-sm max-w-sm">
+                                O gráfico histórico será populado automaticamente assim que clientes iniciarem tráfego no motor.
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Top Domínios Bloqueados Contexto */}
