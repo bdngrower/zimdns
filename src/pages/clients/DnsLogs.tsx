@@ -97,7 +97,18 @@ export function DnsLogs({ clientId }: DnsLogsProps) {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {filteredLogs.map((log: any, idx) => {
-                                const isBlocked = log.reason === 'FilteredBlackList';
+                                const isBlocked = log.reason === 'FilteredBlackList' || log.reason === 'Rewrite' || log.reason === 'FilteredSafeBrowsing' || log.reason === 'FilteredParental';
+
+                                // Formatar o label da Regra/Motivo
+                                let blockReasonLabel = 'Permitido';
+                                if (isBlocked) {
+                                    if (log.rule) {
+                                        blockReasonLabel = log.rule;
+                                    } else {
+                                        blockReasonLabel = log.reason === 'Rewrite' ? 'Redirecionamento' :
+                                            log.reason === 'FilteredParental' ? 'Controle dos Pais' : 'Lista de Bloqueio (Blacklist)'
+                                    }
+                                }
                                 return (
                                     <tr key={idx} className="hover:bg-slate-50/50">
                                         <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
@@ -123,8 +134,12 @@ export function DnsLogs({ clientId }: DnsLogsProps) {
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="px-4 py-3 text-slate-500 max-w-[200px] truncate" title={log.rule}>
-                                            {isBlocked ? log.rule : 'N/A'}
+                                        <td className="px-4 py-3 text-slate-500 max-w-[200px] truncate" title={blockReasonLabel}>
+                                            {isBlocked ? (
+                                                <span className="text-slate-700 font-medium">{blockReasonLabel}</span>
+                                            ) : (
+                                                <span className="text-slate-400">N/A</span>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3 text-slate-500">
                                             {log.client}

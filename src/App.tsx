@@ -9,6 +9,7 @@ import { AppShell } from './components/layout/AppShell';
 
 // Pages
 import { Login } from './pages/Login';
+import { Blocked } from './pages/Blocked';
 import { Dashboard } from './pages/Dashboard';
 import { ClientList } from './pages/clients/ClientList';
 import { ClientDetails } from './pages/clients/ClientDetails';
@@ -41,6 +42,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/blocked" element={<Blocked />} />
 
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
