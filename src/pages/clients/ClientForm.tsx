@@ -157,28 +157,33 @@ export function ClientForm() {
 
             // 2. Salvar Identificação de Rede
             if (!isEditing) {
-                await supabase.from('client_networks').insert({
+                const { error: netErr } = await supabase.from('client_networks').insert({
                     client_id: workingId,
                     type: networkType,
                     value: networkValue,
                     description: networkDesc || 'Rede Principal - ' + formData.name
                 });
+                if (netErr) throw netErr;
             } else {
                 // Em edição, procurar a principal para fazer upsert amigável ou update geral 
-                const { data: net } = await supabase.from('client_networks').select('id').eq('client_id', workingId).limit(1);
+                const { data: net, error: findNetErr } = await supabase.from('client_networks').select('id').eq('client_id', workingId).limit(1);
+                if (findNetErr) throw findNetErr;
+
                 if (net && net.length > 0) {
-                    await supabase.from('client_networks').update({
+                    const { error: updNetErr } = await supabase.from('client_networks').update({
                         type: networkType,
                         value: networkValue,
                         description: networkDesc || 'Rede Principal'
                     }).eq('id', net[0].id);
+                    if (updNetErr) throw updNetErr;
                 } else {
-                    await supabase.from('client_networks').insert({
+                    const { error: insNetErr } = await supabase.from('client_networks').insert({
                         client_id: workingId,
                         type: networkType,
                         value: networkValue,
                         description: networkDesc || 'Rede Principal'
                     });
+                    if (insNetErr) throw insNetErr;
                 }
             }
 
@@ -190,30 +195,38 @@ export function ClientForm() {
             }));
 
             if (isEditing) {
-                await supabase.from('client_policies').delete().eq('client_id', workingId);
+                const { error: delPolErr } = await supabase.from('client_policies').delete().eq('client_id', workingId);
+                if (delPolErr) throw delPolErr;
             }
-            await supabase.from('client_policies').insert(policyInserts);
+
+            const { error: insPolErr } = await supabase.from('client_policies').insert(policyInserts);
+            if (insPolErr) throw insPolErr;
 
             // 4. Salvar Block Page
             if (isEditing) {
-                const { data: pageResult } = await supabase.from('block_pages').select('id').eq('client_id', workingId).limit(1);
+                const { data: pageResult, error: findBpErr } = await supabase.from('block_pages').select('id').eq('client_id', workingId).limit(1);
+                if (findBpErr) throw findBpErr;
+
                 if (pageResult && pageResult.length > 0) {
-                    await supabase.from('block_pages').update({
+                    const { error: updBpErr } = await supabase.from('block_pages').update({
                         description: blockMessage,
                     }).eq('id', pageResult[0].id);
+                    if (updBpErr) throw updBpErr;
                 } else {
-                    await supabase.from('block_pages').insert({
+                    const { error: insBpErr } = await supabase.from('block_pages').insert({
                         client_id: workingId,
                         description: blockMessage,
                         title: 'Acesso Bloqueado',
                     });
+                    if (insBpErr) throw insBpErr;
                 }
             } else {
-                await supabase.from('block_pages').insert({
+                const { error: insBpErr2 } = await supabase.from('block_pages').insert({
                     client_id: workingId,
                     description: blockMessage,
                     title: 'Acesso Bloqueado',
                 });
+                if (insBpErr2) throw insBpErr2;
             }
             try {
                 await fetch('/api/adguard/sync', {
