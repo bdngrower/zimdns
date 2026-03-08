@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import type { GlobalSettings } from '../types';
-import { Server, Activity, AlertCircle, CheckCircle2, Loader2, ArrowRight, RefreshCw } from 'lucide-react';
+import { Server, Activity, AlertCircle, CheckCircle2, Loader2, ArrowRight, RefreshCw, ShieldAlert } from 'lucide-react';
 
 export function Settings() {
     const [settings, setSettings] = useState<GlobalSettings | null>(null);
@@ -9,6 +9,11 @@ export function Settings() {
     const [isTesting, setIsTesting] = useState(false);
     const [isSyncingAll, setIsSyncingAll] = useState(false);
     const [syncResult, setSyncResult] = useState<{ success: number; failed: number; total: number } | null>(null);
+
+    // Blockpage State
+    const [blockpageIp, setBlockpageIp] = useState('');
+    const [isSavingBlockpage, setIsSavingBlockpage] = useState(false);
+    const [blockpageResult, setBlockpageResult] = useState<{ success: boolean; message: string } | null>(null);
 
     const [testResult, setTestResult] = useState<{
         success: boolean;
@@ -36,8 +41,47 @@ export function Settings() {
         } else if (error) {
             console.error("Error loading settings:", error);
         }
+
+        // Ler a blockpage settings inicial invisivelmente do AdGuard
+        try {
+            const resp = await fetch('/api/adguard/status', { method: 'POST' });
+            if (resp.ok) {
+                const configData = await resp.json();
+                if (configData.blocking_mode === 'custom_ip') {
+                    setBlockpageIp(configData.blocking_ipv4 || '');
+                } else {
+                    setBlockpageIp('');
+                }
+            }
+        } catch (e) {
+            // Silencioso, usuário pode simplesmente testar a porta depois
+        }
+
         setIsLoading(false);
     }
+
+    const handleSaveBlockpage = async () => {
+        setIsSavingBlockpage(true);
+        setBlockpageResult(null);
+        try {
+            const res = await fetch('/api/adguard/blockpage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ blockpageIp })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setBlockpageResult({ success: true, message: data.message });
+            } else {
+                setBlockpageResult({ success: false, message: data.message || 'Erro ao comunicar com AdGuard' });
+            }
+        } catch (err: any) {
+            setBlockpageResult({ success: false, message: err.message });
+        } finally {
+            setIsSavingBlockpage(false);
+            setTimeout(() => setBlockpageResult(null), 5000);
+        }
+    };
 
     const testConnection = async () => {
         setIsTesting(true);
@@ -280,6 +324,61 @@ export function Settings() {
                 <div className="bg-slate-50 px-6 py-4 flex items-center justify-between border-t border-border">
                     <div className="flex items-center gap-2 text-sm text-slate-500">
                         Modo Serverless <ArrowRight className="h-3 w-3" /> Seguro e Oculto
+                    </div>
+                </div>
+            </div>
+
+            {/* Blockpage Section */}
+            <div className="bg-white border border-border shadow-sm rounded-xl overflow-hidden mb-8">
+                <div className="border-b border-border bg-slate-50/50 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-red-50 text-red-600 rounded-lg border border-red-100">
+                            <ShieldAlert className="h-6 w-6" />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-semibold text-slate-900">Página de Bloqueio (UX)</h2>
+                            <p className="text-sm text-slate-500">Configuração do redirecionamento transparente de domains (Custom IP).</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-6">
+                    <div className="max-w-2xl">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                            IP do Nginx (Blockpage Proxy)
+                        </label>
+                        <p className="text-sm text-slate-500 mb-3">
+                            Digite o IP externo da máquina/nginx que interceptará as respostas do bloqueio e fará um HTTP 302 direto pro seu ambiente Vercel.
+                            Deixe vazio para o AdGuard usar NXDOMAIN padrão (página quebrada).
+                        </p>
+                        <div className="flex gap-3">
+                            <input
+                                type="text"
+                                placeholder="Ex: 54.232.100.12 ou vazio"
+                                value={blockpageIp}
+                                onChange={(e) => setBlockpageIp(e.target.value)}
+                                className="block w-full rounded-md border-0 py-2 px-3 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-accent sm:text-sm sm:leading-6"
+                            />
+                            <button
+                                onClick={handleSaveBlockpage}
+                                disabled={isSavingBlockpage}
+                                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50"
+                            >
+                                {isSavingBlockpage && <Loader2 className="h-4 w-4 animate-spin text-white" />}
+                                Aplicar IP
+                            </button>
+                        </div>
+
+                        {blockpageResult && (
+                            <div className={`mt-4 p-3 rounded-lg border text-sm flex items-center gap-2 ${blockpageResult.success ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                                {blockpageResult.success ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+                                {blockpageResult.message}
+                            </div>
+                        )}
+
+                        <div className="mt-6 p-4 bg-amber-50 rounded-lg text-sm text-amber-800 border border-amber-200">
+                            <strong>Atenção ao Serverless:</strong> Você precisa subir o `Catch-All Nginx` na estrutura listada na documentação para que o painel ZIM DNS (/blocked) possa ser chamado.
+                        </div>
                     </div>
                 </div>
             </div>

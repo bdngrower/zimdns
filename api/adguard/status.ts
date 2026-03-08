@@ -72,6 +72,19 @@ export default async function handler(req: any, res: any) {
 
         const data = await response.json();
 
+        let filteringConfig = null;
+        try {
+            const filterRes = await fetch(`${cleanUrl}/control/filtering/status`, {
+                method: 'GET',
+                headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/json' }
+            });
+            if (filterRes.ok) {
+                filteringConfig = await filterRes.json();
+            }
+        } catch (e) {
+            console.error('[AdGuard API] Falha ao carregar filtering/status:', e);
+        }
+
         return res.status(200).json({
             success: true,
             connected: true,
@@ -82,6 +95,8 @@ export default async function handler(req: any, res: any) {
             http_port: data.http_port,
             protection_enabled: data.protection_enabled,
             dns_addresses: data.dns_addresses,
+            blocking_ipv4: filteringConfig?.blocking_ipv4 || '',
+            blocking_mode: filteringConfig?.blocking_mode || 'default',
             ms
         });
 
