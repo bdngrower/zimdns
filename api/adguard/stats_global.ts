@@ -103,6 +103,16 @@ export default async function handler(req: any, res: any) {
                 .slice(0, 5); // top 5
         }
 
+        // 4. Busca domínios recém detectados pelas Heurísticas (Auto-Learning)
+        const { data: suggestedData, error: suggestedErr } = await supabase
+            .from('suggested_domains')
+            .select('domain, status, detected_at')
+            .order('detected_at', { ascending: false })
+            .limit(4);
+
+        if (suggestedErr) _debug.errors.push({ query: 'suggestedData', error: suggestedErr });
+        const suggestedDomains = suggestedData || [];
+
         let totalBlockedCount = 0;
         chartSeries.forEach(s => totalBlockedCount += s.blocks);
         _debug.blockedEventsRead = totalBlockedCount;
@@ -114,7 +124,8 @@ export default async function handler(req: any, res: any) {
                 totalQueries24h: totalQueries || 0,
                 totalBlocked24h: totalBlockedCount,
                 topDomains,
-                chartSeries
+                chartSeries,
+                suggestedDomains
             }
         });
 

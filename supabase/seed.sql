@@ -37,6 +37,7 @@ INSERT INTO service_catalog (id, name, description, icon) VALUES
     ('b0000000-0000-0000-0000-000000000003', 'Facebook', 'Rede social Meta', 'facebook'),
     ('b0000000-0000-0000-0000-000000000004', 'TikTok', 'Vídeos curtos ByteDance', 'smartphone'),
     ('b0000000-0000-0000-0000-000000000005', 'LinkedIn', 'Rede profissional', 'linkedin'),
+    ('b0000000-0000-0000-0000-000000000006', 'Todas as Redes (Agregado)', 'Blocklist unificada e gigante', 'users'),
 
     -- Foruns / Comunidades
     ('c0000000-0000-0000-0000-000000000001', 'Reddit', 'Fórum gigante The Front Page', 'message-square'),

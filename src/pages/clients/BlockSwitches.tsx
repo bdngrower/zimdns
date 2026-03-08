@@ -255,7 +255,7 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                                                                     "text-[10px] px-1.5 py-0.5 rounded-md font-medium transition-colors",
                                                                     childActive ? "bg-red-100 text-red-700 font-bold shadow-sm" : "bg-slate-200 text-slate-600"
                                                                 )}>
-                                                                    {childActive ? `${childDomainsCount} domínios aplicados` : `${childDomainsCount} domínios`}
+                                                                    {childActive ? `${new Intl.NumberFormat("pt-BR", { notation: "compact", compactDisplay: "short" }).format(childDomainsCount)} domínios aplicados` : `${new Intl.NumberFormat("pt-BR", { notation: "compact", compactDisplay: "short" }).format(childDomainsCount)} domínios`}
                                                                 </span>
                                                             )}
                                                         </div>

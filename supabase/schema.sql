@@ -191,6 +191,30 @@ CREATE TABLE global_settings (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 16. SYNC_LOGS
+CREATE TABLE sync_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+    request_payload JSONB,
+    response_payload JSONB,
+    rules_count INTEGER,
+    status sync_status_type DEFAULT 'pending',
+    error_message TEXT,
+    started_at TIMESTAMPTZ,
+    finished_at TIMESTAMPTZ
+);
+
+-- 17. SUGGESTED_DOMAINS
+CREATE TABLE suggested_domains (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    domain TEXT NOT NULL,
+    service_id UUID REFERENCES service_catalog(id) ON DELETE CASCADE,
+    client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
+    status TEXT DEFAULT 'pending', -- pending, approved, rejected
+    detected_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(domain, service_id)
+);
+
 -- UPDATE TIMESTAMPS TRIGGERS
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$

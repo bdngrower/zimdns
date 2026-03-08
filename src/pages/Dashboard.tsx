@@ -14,6 +14,7 @@ export function Dashboard() {
     });
     const [topDomains, setTopDomains] = useState<{ domain: string, count: number }[]>([]);
     const [chartSeries, setChartSeries] = useState<{ time: string, queries: number, blocks: number }[]>([]);
+    const [suggestedDomains, setSuggestedDomains] = useState<{ domain: string, status: string, detected_at: string }[]>([]);
 
     const [adguardState, setAdguardState] = useState<{
         status: 'loading' | 'success' | 'error';
@@ -47,6 +48,7 @@ export function Dashboard() {
             let tBlocked = 0;
             let tDomains: any[] = [];
             let tSeries: any[] = [];
+            let tSuggested: any[] = [];
 
             try {
                 const statsRes = await fetch('/api/adguard/stats_global');
@@ -61,6 +63,7 @@ export function Dashboard() {
                     tBlocked = statsData.stats.totalBlocked24h;
                     tDomains = statsData.stats.topDomains;
                     tSeries = statsData.stats.chartSeries || [];
+                    tSuggested = statsData.stats.suggestedDomains || [];
                 }
             } catch (e) {
                 console.error("Dashboard failed to fetch stats_global:", e);
@@ -78,6 +81,7 @@ export function Dashboard() {
 
             setTopDomains(tDomains);
             setChartSeries(tSeries);
+            setSuggestedDomains(tSuggested);
             setIsLoading(false);
 
             // AdGuard Status Fetch (Independente)
@@ -201,7 +205,7 @@ export function Dashboard() {
 
             {/* Empty State Premium Modificado */}
             {/* Empty State Premium Modificado com Grid */}
-            <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="mt-8 grid grid-cols-1 lg:grid-cols-4 gap-6">
 
                 {/* Atividades Recentes / Threat Feed */}
                 <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-8 flex flex-col justify-center min-h-[300px] shadow-sm">
@@ -288,18 +292,50 @@ export function Dashboard() {
                             </ul>
                         </>
                     ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center">
+                        <div className="flex-1 flex flex-col items-center justify-center text-center py-6 opacity-80">
                             <div className="mx-auto h-12 w-12 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
-                                <ShieldAlert className="h-5 w-5 text-slate-400" />
+                                <ShieldAlert className="h-6 w-6 text-slate-300" />
                             </div>
-                            <h3 className="text-sm font-medium text-slate-900">Métricas de Ameaças</h3>
-                            <p className="text-slate-500 mt-2 text-xs max-w-[200px]">
-                                Gráficos de domínios restritos e engajamento das regras de parental control e blacklist surgirão aqui assim que ingeridos.
-                            </p>
+                            <h3 className="text-sm font-semibold text-slate-600">Sem ameaças</h3>
+                            <p className="text-xs text-slate-400 mt-1 max-w-[200px]">Nenhum bloqueio em 24h.</p>
                         </div>
                     )}
                 </div>
 
+                {/* Auto-Learning Contexto */}
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 flex flex-col min-h-[300px] shadow-sm">
+                    {suggestedDomains.length > 0 ? (
+                        <>
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="h-10 w-10 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center shadow-sm">
+                                    <Globe className="h-5 w-5 text-indigo-500" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-semibold text-slate-900">Descobertas (AI)</h3>
+                                    <p className="text-xs text-slate-500">Heurística e evasões (24h)</p>
+                                </div>
+                            </div>
+                            <ul className="space-y-3 flex-1">
+                                {suggestedDomains.map((tp, idx) => (
+                                    <li key={idx} className="flex items-center justify-between group">
+                                        <div className="flex items-center gap-2 overflow-hidden py-1">
+                                            <span className="h-2 w-2 rounded-full bg-indigo-500 flex-shrink-0 animate-pulse"></span>
+                                            <span className="text-sm font-medium text-slate-700 truncate">{tp.domain}</span>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center py-6 opacity-80">
+                            <div className="mx-auto h-12 w-12 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
+                                <Globe className="h-6 w-6 text-slate-300" />
+                            </div>
+                            <h3 className="text-sm font-semibold text-slate-600">Smart Shield</h3>
+                            <p className="text-xs text-slate-400 mt-1 max-w-[200px]">Aguardando IA detectar novas rotas de evasão.</p>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

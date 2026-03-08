@@ -159,8 +159,8 @@ export function ServiceCatalog() {
                                         <div className="flex items-center justify-between">
                                             <h4 className="font-bold text-slate-900 group-hover:text-accent transition-colors text-lg">{item.name}</h4>
                                             {activeTab === 'services' && (item as any).service_domains?.length > 0 && (
-                                                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-1 rounded-md font-medium border border-slate-200">
-                                                    {(item as any).service_domains.length} domínios inclusos
+                                                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-1 rounded-md font-medium border border-slate-200 shadow-sm" title={`${(item as any).service_domains.length} domínios`}>
+                                                    {new Intl.NumberFormat("pt-BR", { notation: "compact", compactDisplay: "short" }).format((item as any).service_domains.length)} domínios
                                                 </span>
                                             )}
                                         </div>
