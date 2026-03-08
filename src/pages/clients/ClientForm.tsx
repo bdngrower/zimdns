@@ -195,15 +195,26 @@ export function ClientForm() {
             await supabase.from('client_policies').insert(policyInserts);
 
             // 4. Salvar Block Page
-            const { error: bpErr } = await supabase.from('block_pages').upsert({
-                client_id: workingId,
-                description: blockMessage,
-                title: 'Acesso Bloqueado',
-            }, { onConflict: 'client_id' });
-
-            if (bpErr) console.warn("Erro ao salvar block page", bpErr);
-
-            // 5. Enviar para API do AdGuard
+            if (isEditing) {
+                const { data: pageResult } = await supabase.from('block_pages').select('id').eq('client_id', workingId).limit(1);
+                if (pageResult && pageResult.length > 0) {
+                    await supabase.from('block_pages').update({
+                        description: blockMessage,
+                    }).eq('id', pageResult[0].id);
+                } else {
+                    await supabase.from('block_pages').insert({
+                        client_id: workingId,
+                        description: blockMessage,
+                        title: 'Acesso Bloqueado',
+                    });
+                }
+            } else {
+                await supabase.from('block_pages').insert({
+                    client_id: workingId,
+                    description: blockMessage,
+                    title: 'Acesso Bloqueado',
+                });
+            }
             try {
                 await fetch('/api/adguard/sync', {
                     method: 'POST',

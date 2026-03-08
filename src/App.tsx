@@ -49,6 +49,7 @@ function App() {
 
             <Route path="/clients" element={<ClientList />} />
             <Route path="/clients/new" element={<ClientForm />} />
+            <Route path="/clients/:id/edit" element={<ClientForm />} />
             <Route path="/clients/:id" element={<ClientDetails />} />
             <Route path="/catalog/services" element={<ServiceCatalog />} />
             <Route path="/reports" element={<Reports />} />
