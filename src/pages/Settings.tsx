@@ -7,7 +7,14 @@ export function Settings() {
     const [settings, setSettings] = useState<GlobalSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isTesting, setIsTesting] = useState(false);
-    const [testResult, setTestResult] = useState<{ success: boolean; message: string; details?: string; ms?: number } | null>(null);
+    const [testResult, setTestResult] = useState<{
+        success: boolean;
+        message: string;
+        details?: string;
+        ms?: number;
+        running?: boolean;
+        version?: string;
+    } | null>(null);
 
     useEffect(() => {
         loadSettings();
@@ -42,7 +49,7 @@ export function Settings() {
             const result = await response.json();
 
             // Garantir interface consistente caso seja 200 OK porem o status retornou algo inesperado
-            if (response.ok) {
+            if (response.ok && result.connected) {
                 setTestResult({
                     ...result,
                     success: true,
@@ -195,19 +202,24 @@ export function Settings() {
                             <div className={`mt-4 p-4 rounded-lg border ${testResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                                 <div className="flex items-start gap-3">
                                     {testResult.success ? <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" /> : <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />}
-                                    <div>
+                                    <div className="flex-1">
                                         <h5 className={`text-sm font-medium ${testResult.success ? 'text-green-800' : 'text-red-800'}`}>
-                                            {testResult.success ? 'Conexão bem sucedida' : 'Erro de Conectividade'}
-                                        </h5>
-                                        <p className={`mt-1 text-sm ${testResult.success ? 'text-green-700' : 'text-red-700'}`}>
                                             {testResult.message}
-                                        </p>
+                                        </h5>
+
+                                        {testResult.success && testResult.version && (
+                                            <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-green-700 bg-green-100/50 p-2 rounded">
+                                                <span><strong>Versão:</strong> {testResult.version}</span>
+                                                <span><strong>Motor Ativo:</strong> {testResult.running ? 'Sim' : 'Não'}</span>
+                                            </div>
+                                        )}
+
                                         {testResult.details && (
                                             <pre className="mt-2 text-xs bg-white/50 p-2 rounded border border-black/5 overflow-x-auto text-slate-600">
                                                 {testResult.details}
                                             </pre>
                                         )}
-                                        {testResult.ms && (
+                                        {testResult.ms !== undefined && (
                                             <p className="mt-2 text-xs font-mono text-slate-500">Latência Serverless &rarr; Motor DNS: {testResult.ms}ms</p>
                                         )}
                                     </div>

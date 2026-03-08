@@ -11,6 +11,8 @@ export function Dashboard() {
     });
     const [adguardState, setAdguardState] = useState<{
         status: 'loading' | 'success' | 'error';
+        connected?: boolean;
+        running?: boolean;
         version?: string;
         dnsAddresses?: string[];
         errorMsg?: string;
@@ -44,9 +46,11 @@ export function Dashboard() {
                 const agRes = await fetch('/api/adguard/status');
                 const agData = await agRes.json();
 
-                if (agRes.ok && agData.success) {
+                if (agRes.ok && agData.connected) {
                     setAdguardState({
                         status: 'success',
+                        connected: true,
+                        running: agData.running,
                         version: agData.version,
                         dnsAddresses: agData.dns_addresses
                     });
@@ -98,7 +102,7 @@ export function Dashboard() {
 
                         {adguardState.status === 'success' && adguardState.dnsAddresses && (
                             <p className="text-xs text-slate-500 mt-2 font-mono bg-slate-50 p-1.5 rounded inline-block border">
-                                Listener(s): {adguardState.dnsAddresses.join(', ')}
+                                IP do Servidor: {adguardState.dnsAddresses[0] || 'Desconhecido'}
                             </p>
                         )}
                     </div>
@@ -113,13 +117,14 @@ export function Dashboard() {
                                 <CheckCircle2 className="h-5 w-5 text-green-600" />
                                 <span className="font-semibold text-green-700">Conectado ao AdGuard</span>
                             </div>
-                            <span className="text-xs text-slate-500 mt-1">Servidor AWS ativo (Versão: {adguardState.version})</span>
+                            <span className="text-xs text-slate-500 mt-1">Servidor DNS AWS - {adguardState.version}</span>
+                            <span className="text-xs text-slate-500 mt-0.5">Status: {adguardState.running ? '🚀 Running' : '🔴 Parado'}</span>
                         </div>
                     ) : (
                         <div className="flex flex-col items-end">
                             <div className="inline-flex items-center gap-2">
                                 <AlertCircle className="h-5 w-5 text-red-600" />
-                                <span className="font-semibold text-red-700">Falha ao conectar ao servidor DNS</span>
+                                <span className="font-semibold text-red-700">Falha de conexão</span>
                             </div>
                             <span className="text-xs text-red-500 font-medium mt-1">{adguardState.errorMsg}</span>
                         </div>

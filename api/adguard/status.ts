@@ -4,37 +4,67 @@ export default async function handler(req: any, res: any) {
     }
 
     try {
-        const apiUrl = process.env.ADGUARD_API_URL;
+        const apiUrlRaw = process.env.ADGUARD_API_URL;
         const username = process.env.ADGUARD_USERNAME;
         const password = process.env.ADGUARD_PASSWORD;
 
-        if (!apiUrl || !username || !password) {
+        if (!apiUrlRaw || !username || !password) {
+            console.error('[AdGuard API] Variáveis de ambiente incompletas');
             return res.status(500).json({
                 success: false,
-                message: 'Variáveis de ambiente do AdGuard não configuradas no Vercel (API_URL, USERNAME, PASSWORD).'
+                connected: false,
+                message: 'Variáveis de ambiente do AdGuard não configuradas.'
             });
         }
 
-        // Criar o token de Basic Auth
-        const authToken = Buffer.from(`${username}:${password}`).toString('base64');
+        // Garantir que ADGUARD_API_URL não tenha /control no final nem / extra
+        const cleanUrl = apiUrlRaw.replace(/\/control\/?$/, '').replace(/\/$/, '');
+        const targetUrl = `${cleanUrl}/control/status`;
+
+        const auth = Buffer.from(`${username}:${password}`).toString('base64');
         const startTime = Date.now();
 
-        // Faz o request para o endpoint de status real do AdGuard
-        const response = await fetch(`${apiUrl}/status`, {
+        console.log(`[AdGuard API] GET -> ${targetUrl}`);
+
+        const response = await fetch(targetUrl, {
             method: 'GET',
             headers: {
-                'Authorization': `Basic ${authToken}`,
+                'Authorization': `Basic ${auth}`,
                 'Content-Type': 'application/json',
             }
         });
 
         const ms = Date.now() - startTime;
 
+        console.log(`[AdGuard API] Resposta: HTTP ${response.status} (${ms}ms)`);
+
+        if (response.status === 401) {
+            console.error('[AdGuard API] Falha de Autenticação (401)');
+            return res.status(401).json({
+                success: false,
+                connected: false,
+                message: 'Erro de autenticação: usuário ou senha inválidos.',
+                ms
+            });
+        }
+
+        if (response.status === 404) {
+            console.error('[AdGuard API] Endpoint Incorreto (404)');
+            return res.status(404).json({
+                success: false,
+                connected: false,
+                message: 'Erro de conexão: endpoint incorreto ou não encontrado.',
+                ms
+            });
+        }
+
         if (!response.ok) {
             const errorText = await response.text();
+            console.error(`[AdGuard API] Erro HTTP ${response.status}:`, errorText);
             return res.status(response.status).json({
                 success: false,
-                message: `Falha na autenticação ou indisponibilidade (HTTP ${response.status}).`,
+                connected: false,
+                message: `Falha na comunicação (HTTP ${response.status}).`,
                 details: errorText,
                 ms
             });
@@ -42,21 +72,25 @@ export default async function handler(req: any, res: any) {
 
         const data = await response.json();
 
-        // Retornar os parâmetros solicitados: running, dns_addresses, version
         return res.status(200).json({
             success: true,
-            message: 'Conectado ao AdGuard Home com sucesso.',
-            running: data.running || false,
-            dns_addresses: data.dns_addresses || ['Desconhecido'],
-            version: data.version || 'Desconhecida',
+            connected: true,
+            message: 'Conexão OK',
+            running: data.running,
+            version: data.version,
+            dns_port: data.dns_port,
+            http_port: data.http_port,
+            protection_enabled: data.protection_enabled,
+            dns_addresses: data.dns_addresses,
             ms
         });
 
     } catch (error: any) {
-        console.error('AdGuard Connection Test Error:', error);
+        console.error('[AdGuard API] Erro de rede ou indisponibilidade:', error);
         return res.status(500).json({
             success: false,
-            message: 'Erro de rede ao tentar contactar o servidor.',
+            connected: false,
+            message: 'Erro de rede ou indisponibilidade do servidor.',
             details: error?.message || 'Unknown Error'
         });
     }
