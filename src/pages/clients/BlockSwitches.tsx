@@ -251,8 +251,11 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                                                         <div className="flex items-center gap-2">
                                                             <h5 className="font-medium text-slate-800 text-sm">{child.name}</h5>
                                                             {childDomainsCount > 0 && (
-                                                                <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-md font-medium">
-                                                                    {childDomainsCount} domínios
+                                                                <span className={cn(
+                                                                    "text-[10px] px-1.5 py-0.5 rounded-md font-medium transition-colors",
+                                                                    childActive ? "bg-red-100 text-red-700 font-bold shadow-sm" : "bg-slate-200 text-slate-600"
+                                                                )}>
+                                                                    {childActive ? `${childDomainsCount} domínios aplicados` : `${childDomainsCount} domínios`}
                                                                 </span>
                                                             )}
                                                         </div>

@@ -26,7 +26,7 @@ export function ServiceCatalog() {
         async function loadCatalog() {
             setIsLoading(true);
             const [servicesRes, categoriesRes] = await Promise.all([
-                supabase.from('service_catalog').select('*').order('name'),
+                supabase.from('service_catalog').select('*, service_domains(domain)').order('name'),
                 supabase.from('block_categories').select('*').order('name'),
             ]);
 
@@ -156,7 +156,14 @@ export function ServiceCatalog() {
                                         </div>
                                     </div>
                                     <div className="flex-1">
-                                        <h4 className="font-bold text-slate-900 group-hover:text-accent transition-colors text-lg">{item.name}</h4>
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="font-bold text-slate-900 group-hover:text-accent transition-colors text-lg">{item.name}</h4>
+                                            {activeTab === 'services' && (item as any).service_domains?.length > 0 && (
+                                                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-1 rounded-md font-medium border border-slate-200">
+                                                    {(item as any).service_domains.length} domínios inclusos
+                                                </span>
+                                            )}
+                                        </div>
                                         <p className="text-sm text-slate-500 mt-2 line-clamp-2 leading-relaxed">
                                             {item.description || 'Assinaturas de rede vinculadas a esta política de segurança.'}
                                         </p>
