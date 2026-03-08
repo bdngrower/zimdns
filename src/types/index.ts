@@ -2,7 +2,7 @@ export type EntityStatus = 'active' | 'inactive';
 export type UserRole = 'super_admin' | 'tecnico' | 'cliente';
 export type OriginType = 'ip' | 'dyndns';
 export type OriginStatus = 'active' | 'error' | 'pending';
-export type SyncStatus = 'pending' | 'success' | 'error';
+export type SyncStatus = 'pending' | 'success' | 'error' | 'warning';
 
 export interface Profile {
     id: string;

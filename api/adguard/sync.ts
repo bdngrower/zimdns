@@ -23,6 +23,7 @@ export default async function handler(req: any, res: any) {
 
     try {
         supabase = createClient(supabaseUrl, supabaseKey);
+        const startedAt = new Date().toISOString();
 
         const adguardUrl = process.env.ADGUARD_API_URL;
         const adguardUser = process.env.ADGUARD_USERNAME;
@@ -112,35 +113,86 @@ export default async function handler(req: any, res: any) {
             throw new Error(`Falha API Adguard (HTTP ${agRes.status}): ${agErrorTxt}`);
         }
 
+        // Pós-validação: GET /control/filtering/status para verificar se a aplicação pegou as regras
+        const checkRes = await fetch(`${adguardUrl}/control/filtering/status`, {
+            headers: { 'Authorization': `Basic ${token}` }
+        });
+        const checkData = await checkRes.json();
+        const activeRules = checkData.user_rules || [];
+
+        // Verifica se as enviadas estão presentes nas rules globais (considerando o modelo MVP atual de regras adguard)
+        const missingRules = effectiveRules.filter((r: unknown) => typeof r === 'string' && !activeRules.includes(r));
+        let finalStatusMsg = 'Aplicações validadas no AdGuard com sucesso!';
+        let statusDb = 'success';
+
+        if (missingRules.length > 0) {
+            finalStatusMsg = `Aviso: Request OK, mas ${missingRules.length} regras não constam como ativas na validação do motor.`;
+            statusDb = 'warning';
+        }
+
         // 5. Atualizar sucesso no client
         const now = new Date().toISOString();
+
+        const responsePayload = {
+            set_rules_status: agRes.status,
+            validation: {
+                applied: effectiveRules.length - missingRules.length,
+                missing: missingRules.length
+            },
+            missing_examples: missingRules.slice(0, 3)
+        };
+
         await supabase.from('clients').update({
-            sync_status: 'success',
+            sync_status: statusDb,
             last_sync_at: now,
-            sync_error_message: null
+            sync_error_message: statusDb === 'warning' ? finalStatusMsg : null
         }).eq('id', clientId);
+
+        // Grava no Log
+        await supabase.from('sync_logs').insert({
+            client_id: clientId,
+            request_payload: payload,
+            response_payload: responsePayload,
+            status: statusDb,
+            rules_count: effectiveRules.length,
+            started_at: startedAt,
+            finished_at: now
+        });
 
         return res.status(200).json({
             success: true,
+            warning: statusDb === 'warning',
             rulesCount: effectiveRules.length,
-            message: 'Regras DNS sincronizadas com sucesso com o motor de filtragem AWS'
+            message: finalStatusMsg
         });
 
     } catch (error: any) {
         console.error('DNS Sync Error:', error);
 
-        // Atualizar falha
+        const now = new Date().toISOString();
+        const errMsg = error?.message || 'Erro desconhecido ao comunicar com AdGuard';
+
+        // Atualizar falha no client
         if (supabase) {
             await supabase.from('clients').update({
                 sync_status: 'error',
-                sync_error_message: error?.message || 'Erro desconhecido ao comunicar com AdGuard',
-                last_sync_at: new Date().toISOString()
+                sync_error_message: errMsg,
+                last_sync_at: now
             }).eq('id', clientId);
+
+            // Grava Log Erro
+            await supabase.from('sync_logs').insert({
+                client_id: clientId,
+                status: 'error',
+                started_at: now, // Simplificado, já que no catch podemos ter perdido o fluxo,
+                finished_at: now,
+                error_message: errMsg
+            });
         }
 
         return res.status(200).json({
             success: false,
-            message: error?.message || 'Erro interno ao sincronizar'
+            message: errMsg
         });
     }
 }

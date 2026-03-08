@@ -8,6 +8,8 @@ import { BlockSwitches } from './BlockSwitches';
 import { ManualRules } from './ManualRules';
 import { BlockPageSettings } from './BlockPageSettings';
 import { NetworkOrigins } from './NetworkOrigins';
+import { DnsLogs } from './DnsLogs';
+import { Activity } from 'lucide-react';
 
 export function ClientDetails() {
     const { id } = useParams();
@@ -15,7 +17,9 @@ export function ClientDetails() {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [isLoading, setIsLoading] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
-    const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+    const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'warning' | 'error', text: string } | null>(null);
+    const [syncLogs, setSyncLogs] = useState<any[]>([]);
+    const [trafficDetected, setTrafficDetected] = useState<boolean | null>(null);
 
     async function loadClient() {
         if (!id) return;
@@ -29,6 +33,31 @@ export function ClientDetails() {
         if (!error && data) {
             setClient(data);
         }
+
+        // Puxar logs de sincronia
+        const { data: logsData } = await supabase
+            .from('sync_logs')
+            .select('*')
+            .eq('client_id', id)
+            .order('started_at', { ascending: false })
+            .limit(5);
+
+        if (logsData) {
+            setSyncLogs(logsData);
+        }
+
+        // Verificar trafego assincronamente (não bloqueante)
+        fetch(`/api/adguard/logs?clientId=${id}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.logs && data.logs.length > 0) {
+                    setTrafficDetected(true);
+                } else {
+                    setTrafficDetected(false);
+                }
+            })
+            .catch(() => setTrafficDetected(false));
+
         setIsLoading(false);
     }
 
@@ -50,12 +79,15 @@ export function ClientDetails() {
 
             const result = await response.json();
 
-            if (result.success) {
-                setSyncMessage({ type: 'success', text: 'Sincronização concluída com sucesso!' });
-                await loadClient(); // Recarrega os dados para pegar o novo status do banco
+            if (result.success && !result.warning) {
+                setSyncMessage({ type: 'success', text: 'Sincronização processada e aplicada 100% no motor!' });
+                await loadClient();
+            } else if (result.success && result.warning) {
+                setSyncMessage({ type: 'warning', text: result.message || 'Regras enviadas, mas faltam no motor atuante.' });
+                await loadClient();
             } else {
                 setSyncMessage({ type: 'error', text: result.message || 'Falha ao sincronizar' });
-                await loadClient(); // Recarrega para ver a msg de erro do banco se houver
+                await loadClient();
             }
         } catch (error: any) {
             setSyncMessage({ type: 'error', text: `Erro de rede: ${error.message}` });
@@ -75,6 +107,7 @@ export function ClientDetails() {
     const tabs = [
         { id: 'dashboard', name: 'Visão Geral e Sync', icon: Settings },
         { id: 'network', name: 'Origens de Rede', icon: Network },
+        { id: 'dns_logs', name: 'Consultas DNS', icon: Activity },
         { id: 'blocks', name: 'Bloqueios (Switches)', icon: ShieldAlert },
         { id: 'rules', name: 'Regras Manuais', icon: List },
         { id: 'blockpage', name: 'Página de Bloqueio', icon: Paintbrush },
@@ -90,13 +123,24 @@ export function ClientDetails() {
                     </Link>
                     <div className="flex items-center gap-4">
                         <h1 className="text-2xl font-bold tracking-tight text-slate-900">{client.name}</h1>
-                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border ${client.status === 'active'
-                            ? 'bg-green-50 text-green-700 border-green-200'
-                            : 'bg-slate-100 text-slate-600 border-slate-200'
-                            }`}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${client.status === 'active' ? 'bg-green-600' : 'bg-slate-400'}`}></span>
-                            {client.status === 'active' ? 'Operacional' : 'Inativo'}
-                        </span>
+                        <div className="flex gap-2">
+                            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border ${client.status === 'active'
+                                ? 'bg-slate-100 text-slate-700 border-slate-200'
+                                : 'bg-red-50 text-red-700 border-red-200'
+                                }`}>
+                                Conta: {client.status === 'active' ? 'Ativa' : 'Inativa'}
+                            </span>
+                            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border ${trafficDetected === true ? 'bg-green-50 text-green-700 border-green-200' :
+                                    trafficDetected === false ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                        'bg-slate-100 text-slate-600 border-slate-200'
+                                }`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${trafficDetected === true ? 'bg-green-600' :
+                                        trafficDetected === false ? 'bg-yellow-500' :
+                                            'bg-slate-400'
+                                    }`}></span>
+                                {trafficDetected === true ? 'Tráfego DNS Ativo' : trafficDetected === false ? 'Sem tráfego detectado' : 'Verificando DNS...'}
+                            </span>
+                        </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -166,25 +210,26 @@ export function ClientDetails() {
                             <h3 className="text-lg font-semibold text-slate-900 mb-4">Integração AdGuard</h3>
                             <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-6 rounded-xl border border-slate-200 shadow-sm gap-6">
                                 <div className="flex items-start gap-5">
-                                    <div className={`p-4 rounded-xl shrink-0 ${client.sync_status === 'success' ? 'bg-green-50/80 border border-green-100 text-green-600' : client.sync_status === 'error' ? 'bg-red-50/80 border border-red-100 text-red-600' : 'bg-slate-50 border border-slate-200 text-slate-500'}`}>
+                                    <div className={`p-4 rounded-xl shrink-0 ${client.sync_status === 'success' ? 'bg-green-50/80 border border-green-100 text-green-600' : client.sync_status === 'warning' ? 'bg-yellow-50/80 border border-yellow-200 text-yellow-600' : client.sync_status === 'error' ? 'bg-red-50/80 border border-red-100 text-red-600' : 'bg-slate-50 border border-slate-200 text-slate-500'}`}>
                                         <Server className="h-6 w-6" />
                                     </div>
                                     <div>
                                         <p className="text-sm font-semibold text-slate-900">Estado da Transmissão de Regras</p>
                                         <div className="flex flex-wrap items-center gap-2 mt-1.5">
                                             <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${client.sync_status === 'success' ? 'bg-green-50 text-green-700 ring-green-600/20' :
+                                                client.sync_status === 'warning' ? 'bg-yellow-50 text-yellow-800 ring-yellow-600/20' :
                                                     client.sync_status === 'error' ? 'bg-red-50 text-red-700 ring-red-600/20' :
                                                         'bg-slate-50 text-slate-600 ring-slate-500/10'
                                                 }`}>
-                                                {client.sync_status === 'success' ? 'Sincronizado' : client.sync_status === 'error' ? 'Falha Operacional' : 'Aguardando Sincronia'}
+                                                {client.sync_status === 'success' ? 'Operação Completa' : client.sync_status === 'warning' ? 'Sucesso Parcial' : client.sync_status === 'error' ? 'Falha Operacional' : 'Aguardando Sincronia'}
                                             </span>
                                         </div>
                                         <div className="mt-2 text-sm text-slate-500">
                                             Último evento processado: {client.last_sync_at ? new Date(client.last_sync_at).toLocaleString('pt-BR') : 'Sem registros'}
                                         </div>
 
-                                        {(client.sync_status === 'error' && client.sync_error_message) && (
-                                            <div className="mt-3 p-3 bg-red-50 text-red-700 text-xs rounded-lg border border-red-100 flex items-start gap-2">
+                                        {(client.sync_status === 'error' || client.sync_status === 'warning') && client.sync_error_message && (
+                                            <div className={`mt-3 p-3 text-xs rounded-lg border flex items-start gap-2 ${client.sync_status === 'error' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-yellow-50 text-yellow-800 border-yellow-200'}`}>
                                                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                                                 <span>{client.sync_error_message}</span>
                                             </div>
@@ -213,15 +258,60 @@ export function ClientDetails() {
 
                             <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/30 p-4">
                                 <p className="text-sm text-blue-800/80 leading-relaxed">
-                                    <span className="font-semibold text-blue-900">Como funciona:</span> O processo de "Forçar Sincronia" empacota as origens de rede deste client e suas configurações de bloqueio (Services, Categories, Block Page) enviando-as diretamente para a infraestrutura do AdGuard Serverless em poucos segundos.
+                                    <span className="font-semibold text-blue-900">Como funciona:</span> O processo de "Forçar Sincronia" empacota as origens de rede deste client e suas configurações de bloqueio engessando o payload pro ecossistema central AdGuard.
                                 </p>
                             </div>
                         </div>
+
+                        {syncLogs.length > 0 && (
+                            <div>
+                                <h3 className="text-sm font-semibold text-slate-900 mb-3 ml-1">Histórico Recente de Sincronização</h3>
+                                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                                    <table className="min-w-full divide-y divide-slate-200 text-sm text-left">
+                                        <thead className="bg-slate-50">
+                                            <tr>
+                                                <th className="px-4 py-3 font-medium text-slate-500">Data/Hora</th>
+                                                <th className="px-4 py-3 font-medium text-slate-500">Status</th>
+                                                <th className="px-4 py-3 font-medium text-slate-500">Regras Injetadas</th>
+                                                <th className="px-4 py-3 font-medium text-slate-500">Observação</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {syncLogs.map((log) => (
+                                                <tr key={log.id} className="hover:bg-slate-50">
+                                                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                                                        {new Date(log.started_at).toLocaleString('pt-BR')}
+                                                    </td>
+                                                    <td className="px-4 py-3 font-medium">
+                                                        <span className={`inline-block px-2 py-0.5 rounded-md text-xs border ${log.status === 'success' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                            log.status === 'warning' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                                                'bg-red-50 text-red-700 border-red-200'
+                                                            }`}>
+                                                            {log.status === 'success' ? 'Sucesso' : log.status === 'warning' ? 'Aviso' : 'Erro API'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-slate-600">
+                                                        {log.rules_count ?? '-'} rotas compiladas
+                                                    </td>
+                                                    <td className="px-4 py-3 text-xs text-slate-500 max-w-[280px] truncate">
+                                                        {log.error_message || (log.response_payload?.missing_examples ? `Faltando no motor: ${log.response_payload.missing_examples}` : 'Tudo certo')}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
                 {activeTab === 'network' && (
                     <NetworkOrigins clientId={client.id} />
+                )}
+
+                {activeTab === 'dns_logs' && (
+                    <DnsLogs clientId={client.id} />
                 )}
 
                 {activeTab === 'blocks' && (

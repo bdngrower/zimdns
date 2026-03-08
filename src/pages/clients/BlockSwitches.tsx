@@ -33,7 +33,7 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
             setIsLoading(true);
 
             const [servsRes, togglesRes] = await Promise.all([
-                supabase.from('service_catalog').select('*').order('name'),
+                supabase.from('service_catalog').select('*, service_domains(domain)').order('name'),
                 supabase.from('client_policies').select('*').eq('client_id', clientId).eq('enabled', true)
             ]);
 
@@ -84,6 +84,9 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                     enabled: true
                 });
             }
+
+            // Marca status que precisa sync
+            await supabase.from('clients').update({ sync_status: 'pending' }).eq('id', clientId);
         } catch (err) {
             console.error('Save failed', err);
             setActiveToggles(prev => ({ ...prev, [policyName]: currentlyActive }));
@@ -106,7 +109,10 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                 <div>
                     <h3 className="text-lg font-medium text-slate-900">Switches de Bloqueio</h3>
                     <p className="text-sm text-slate-500">
-                        Ative as políticas para bloquear serviços reais. O sistema processará os domínios via AdGuard API.
+                        Ative as políticas para bloquear serviços reais. O sistema compilará os domínios via AdGuard API.
+                    </p>
+                    <p className="text-xs text-orange-600 mt-1 font-medium bg-orange-50 inline-block px-2 py-0.5 rounded-md border border-orange-100">
+                        Após ativar chaves, vá em "Visão Geral e Sync" e force a Sincronia de DNS.
                     </p>
                 </div>
                 <div className="relative w-full sm:w-64">
@@ -181,11 +187,23 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                         {displayChildren.map(child => {
                                             const childActive = activeToggles[child.name] || false;
+                                            const childDomainsCount = child.service_domains?.length || 0;
                                             return (
-                                                <div key={child.name} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-slate-200 bg-slate-50/50 transition-colors">
+                                                <div key={child.name} className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${childActive ? 'bg-blue-50/50 border-blue-200' : 'border-slate-100 hover:border-slate-200 bg-slate-50/50'
+                                                    }`}>
                                                     <div className="flex-1 pr-3">
-                                                        <h5 className="font-medium text-slate-800 text-sm">{child.name}</h5>
-                                                        <p className="text-xs text-slate-500 mt-0.5 max-w-[180px] truncate" title={child.description}>{child.description}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <h5 className="font-medium text-slate-800 text-sm">{child.name}</h5>
+                                                            {childDomainsCount > 0 && (
+                                                                <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-md font-medium">
+                                                                    {childDomainsCount} domínios
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-slate-500 mt-1 flex-wrap break-all" title={child.description || ''}>
+                                                            {child.service_domains?.slice(0, 3).map((d: any) => d.domain).join(', ')}
+                                                            {childDomainsCount > 3 ? '...' : ''}
+                                                        </p>
                                                     </div>
                                                     <button
                                                         onClick={() => handleToggle(child.name)}
