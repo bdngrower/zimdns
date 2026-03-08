@@ -19,6 +19,7 @@ export function DnsLogs({ clientId }: DnsLogsProps) {
                 const res = await fetch(`/api/adguard/logs?clientId=${clientId}`);
                 const data = await res.json();
                 if (data.success) {
+                    console.log("🟢 ZIM DNS Frontend - Logs _debug payload:", data._debug || "No debug payload received.");
                     setLogs(data.logs || []);
                 } else {
                     setError(data.message || 'Erro ao carregar logs');

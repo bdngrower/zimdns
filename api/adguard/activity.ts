@@ -75,24 +75,47 @@ export default async function handler(req: any, res: any) {
         const logData = await agRes.json();
         const allLogs = logData.data || [];
 
-        // Helper para extrair o IP do formato "host (IP)"
+        // Helper para extrair o IP com base em Regex mais seguro e strings sujas.
         const extractIp = (clientStr: string) => {
             if (!clientStr) return '';
-            const match = clientStr.match(/\((.*?)\)/);
-            if (match && match[1]) {
-                return match[1].trim();
+            // Match para IPv4 ou IPv6 soltos no texto original:
+            const ipMatch = clientStr.match(/\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/);
+            if (ipMatch) return ipMatch[0];
+
+            // Fallback velho: (ip) 
+            const parenMatch = clientStr.match(/\((.*?)\)/);
+            if (parenMatch && parenMatch[1]) {
+                return parenMatch[1].trim();
             }
             return clientStr.trim();
         };
 
         const isClientMatch = (log: any, ips: Set<string>) => {
-            const logIp = log.client_ip || extractIp(log.client) || log.client;
+            const clientFieldValue = log.client || '';
+            const clientIpFieldValue = log.client_ip || '';
+            const extractedIp = extractIp(clientFieldValue);
+
             for (const validIp of Array.from(ips)) {
-                if (logIp === validIp || (log.client && log.client.includes(validIp))) {
+                if (
+                    validIp === clientIpFieldValue ||
+                    validIp === extractedIp ||
+                    validIp === clientFieldValue ||
+                    clientFieldValue.includes(validIp)
+                ) {
                     return true;
                 }
             }
             return false;
+        };
+
+        // Objeto para Tracking explícito do Frontend
+        const _debug = {
+            clientId,
+            registeredOrigins: Array.from(validIps),
+            rawQuerylogCount: allLogs.length,
+            rawQuerylogSample: allLogs.slice(0, 3), // Pegar as tres primeiras pra printar na tela caso queiramos.
+            extractedIpsSample: allLogs.slice(0, 10).map((l: any) => extractIp(l.client || '')),
+            matchedLogsCount: 0
         };
 
         if (allLogs.length > 0) {
@@ -102,6 +125,8 @@ export default async function handler(req: any, res: any) {
 
         // Filtrar
         const clientLogs = allLogs.filter((log: any) => isClientMatch(log, validIps));
+
+        _debug.matchedLogsCount = clientLogs.length;
 
         console.log(` Matches encontrados (Activity): ${clientLogs.length} / ${allLogs.length}`);
 
@@ -114,7 +139,8 @@ export default async function handler(req: any, res: any) {
             lastSeenAt = clientLogs[0].time; // AdGuard normally orders newest first
 
             for (const log of clientLogs) {
-                matchedOrigins.add(extractIp(log.client));
+                // Guarda todas as variações de nomes q o log jogou
+                matchedOrigins.add(log.client);
                 if (log.reason === 'FilteredBlackList') {
                     blockedCount++;
                     if (!lastBlockedDomain) {
@@ -126,6 +152,7 @@ export default async function handler(req: any, res: any) {
 
         return res.status(200).json({
             success: true,
+            _debug,
             data: {
                 isActive: clientLogs.length > 0,
                 lastSeenAt,
