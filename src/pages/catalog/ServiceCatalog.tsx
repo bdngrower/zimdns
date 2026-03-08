@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Database, Search, Layers, LayoutGrid } from 'lucide-react';
+import { Database, Search, Layers, LayoutGrid, X, ExternalLink, ShieldAlert, CheckCircle2, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface CatalogItem {
@@ -17,6 +17,10 @@ export function ServiceCatalog() {
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'categories' | 'services'>('categories');
     const [searchTerm, setSearchTerm] = useState('');
+
+    // Slideover states
+    const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
+    const [itemDetails, setItemDetails] = useState<{ domains: string[], loading: boolean }>({ domains: [], loading: false });
 
     useEffect(() => {
         async function loadCatalog() {
@@ -39,6 +43,29 @@ export function ServiceCatalog() {
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase()))
     );
+
+    const handleSelect = async (item: CatalogItem) => {
+        setSelectedItem(item);
+        setItemDetails({ domains: [], loading: true });
+
+        try {
+            const table = activeTab === 'categories' ? 'category_domains' : 'service_domains';
+            const idColumn = activeTab === 'categories' ? 'category_id' : 'service_id';
+
+            const { data, error } = await supabase
+                .from(table)
+                .select('domain')
+                .eq(idColumn, item.id);
+
+            if (!error && data) {
+                setItemDetails({ domains: data.map(d => d.domain), loading: false });
+            } else {
+                setItemDetails({ domains: [], loading: false });
+            }
+        } catch {
+            setItemDetails({ domains: [], loading: false });
+        }
+    };
 
     return (
         <div className="p-8 max-w-7xl mx-auto">
@@ -108,22 +135,136 @@ export function ServiceCatalog() {
                             </p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                             {filteredItems.map(item => (
-                                <div key={item.id} className="group flex flex-col p-5 bg-white border border-slate-200 rounded-xl hover:shadow-md hover:border-blue-200 transition-all cursor-default">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="h-12 w-12 rounded-xl bg-slate-50 group-hover:bg-blue-50/50 flex items-center justify-center border border-slate-100 transition-colors">
-                                            <Database className="h-6 w-6 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                                <div
+                                    key={item.id}
+                                    onClick={() => handleSelect(item)}
+                                    className="group flex flex-col p-6 bg-white border border-slate-200 rounded-2xl cursor-pointer hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:border-accent/40 transition-all duration-300 relative overflow-hidden"
+                                >
+                                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent/0 via-accent/0 to-accent/0 group-hover:from-accent/80 group-hover:via-accent/40 group-hover:to-transparent transition-all duration-500"></div>
+                                    <div className="flex items-center justify-between mb-5">
+                                        <div className="h-14 w-14 rounded-2xl bg-slate-50 group-hover:bg-accent/5 flex items-center justify-center border border-slate-100 group-hover:border-accent/10 transition-colors">
+                                            {activeTab === 'categories' ? (
+                                                <Layers className="h-6 w-6 text-slate-400 group-hover:text-accent transition-colors" />
+                                            ) : (
+                                                <LayoutGrid className="h-6 w-6 text-slate-400 group-hover:text-accent transition-colors" />
+                                            )}
+                                        </div>
+                                        <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity translate-x-4 group-hover:translate-x-0">
+                                            <ChevronRight className="h-4 w-4 text-accent" />
                                         </div>
                                     </div>
-                                    <div>
-                                        <h4 className="font-semibold text-slate-900 group-hover:text-blue-900 transition-colors">{item.name}</h4>
-                                        <p className="text-sm text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
-                                            {item.description || 'Gere bloqueios com base nas assinaturas DNS deste perfil.'}
+                                    <div className="flex-1">
+                                        <h4 className="font-bold text-slate-900 group-hover:text-accent transition-colors text-lg">{item.name}</h4>
+                                        <p className="text-sm text-slate-500 mt-2 line-clamp-2 leading-relaxed">
+                                            {item.description || 'Assinaturas de rede vinculadas a esta política de segurança.'}
                                         </p>
+                                    </div>
+                                    <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
+                                            <CheckCircle2 className="h-3.5 w-3.5" /> Oficial
+                                        </span>
+                                        <span className="text-xs font-medium text-slate-400 group-hover:text-accent transition-colors">
+                                            Explorar Política
+                                        </span>
                                     </div>
                                 </div>
                             ))}
+                            {/* Slideover para Detalhes do Item */}
+                            {selectedItem && (
+                                <div className="fixed inset-0 z-50 overflow-hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
+                                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setSelectedItem(null)}></div>
+                                    <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10 sm:pl-16">
+                                        <div className="pointer-events-auto w-screen max-w-md transform transition-transform duration-300 ease-in-out">
+                                            <div className="flex h-full flex-col bg-white shadow-2xl border-l border-slate-200">
+                                                <div className="px-6 py-6 border-b border-slate-100 bg-slate-50/50">
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="h-12 w-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                                                                {activeTab === 'categories' ? <Layers className="h-6 w-6 text-accent" /> : <LayoutGrid className="h-6 w-6 text-accent" />}
+                                                            </div>
+                                                            <div>
+                                                                <h2 className="text-lg font-bold text-slate-900" id="slide-over-title">
+                                                                    {selectedItem.name}
+                                                                </h2>
+                                                                <p className="text-sm text-slate-500 font-medium">Visualização da Política</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="ml-3 flex h-7 items-center">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSelectedItem(null)}
+                                                                className="relative rounded-md bg-white text-slate-400 hover:text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-accent"
+                                                            >
+                                                                <span className="absolute -inset-2.5"></span>
+                                                                <span className="sr-only">Fechar painel</span>
+                                                                <X className="h-6 w-6" aria-hidden="true" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="mt-6">
+                                                        <p className="text-sm text-slate-600 leading-relaxed">
+                                                            {selectedItem.description || 'Assinaturas de rede vinculadas a esta política de segurança que podem ser ativadas no perfil do cliente.'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30">
+                                                    <div className="flex items-center justify-between mb-4">
+                                                        <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                                                            <ShieldAlert className="h-4 w-4 text-slate-400" />
+                                                            Domínios Interceptados
+                                                        </h3>
+                                                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                                                            {itemDetails.loading ? '...' : itemDetails.domains.length} alvos
+                                                        </span>
+                                                    </div>
+
+                                                    {itemDetails.loading ? (
+                                                        <div className="flex flex-col items-center justify-center p-8 text-center bg-white rounded-xl border border-slate-200">
+                                                            <div className="h-6 w-6 border-2 border-accent border-t-transparent animate-spin rounded-full mb-3" />
+                                                            <span className="text-sm text-slate-500">Mapeando domínios...</span>
+                                                        </div>
+                                                    ) : itemDetails.domains.length === 0 ? (
+                                                        <div className="flex flex-col items-center justify-center p-8 text-center bg-white rounded-xl border border-slate-200 border-dashed">
+                                                            <Database className="h-8 w-8 text-slate-300 mb-3" />
+                                                            <span className="text-sm font-medium text-slate-900">Nenhum domínio</span>
+                                                            <span className="text-xs text-slate-500 mt-1">O pacote não possui assinaturas listadas.</span>
+                                                        </div>
+                                                    ) : (
+                                                        <ul className="space-y-2">
+                                                            {itemDetails.domains.map((domain, index) => (
+                                                                <li key={index} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-slate-300 group">
+                                                                    <span className="text-sm font-medium text-slate-700 truncate">{domain}</span>
+                                                                    <a
+                                                                        href={`https://${domain}`}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="text-slate-300 hover:text-accent opacity-0 group-hover:opacity-100 transition-all p-1"
+                                                                    >
+                                                                        <ExternalLink className="h-3.5 w-3.5" />
+                                                                    </a>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                </div>
+                                                <div className="border-t border-slate-200 bg-white p-6">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => window.location.href = '/clients'}
+                                                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition-colors"
+                                                    >
+                                                        Ir para Clientes
+                                                        <ChevronRight className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

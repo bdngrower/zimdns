@@ -72,18 +72,18 @@ export function Dashboard() {
     }, []);
 
     const cards = [
-        { name: 'Clientes Ativos', value: stats.clients, icon: Users, change: 'Total', changeType: 'neutral' },
-        { name: 'Regras Manuais Cadastradas', value: stats.rules, icon: ShieldAlert, change: 'Geral', changeType: 'neutral' },
-        { name: 'Categorias de Bloqueio', value: stats.categories, icon: Activity, change: 'Sistema', changeType: 'neutral' },
-        { name: 'Serviços Restritos mapeados', value: stats.services, icon: Globe, change: 'Catálogo', changeType: 'neutral' },
+        { name: 'Clientes Protegidos', value: stats.clients, icon: Users, iconColor: 'text-indigo-600', bg: 'bg-indigo-50/80', border: 'border-indigo-100' },
+        { name: 'Regras Específicas', value: stats.rules, icon: ShieldAlert, iconColor: 'text-rose-600', bg: 'bg-rose-50/80', border: 'border-rose-100' },
+        { name: 'Catálogo de Ameaças', value: stats.categories, icon: Activity, iconColor: 'text-amber-600', bg: 'bg-amber-50/80', border: 'border-amber-100' },
+        { name: 'Serviços Mapeados', value: stats.services, icon: Globe, iconColor: 'text-emerald-600', bg: 'bg-emerald-50/80', border: 'border-emerald-100' },
     ];
 
     return (
-        <div className="p-8">
+        <div className="p-8 max-w-6xl mx-auto">
             <div className="mb-8">
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard Geral</h1>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Monitoramento Executivo</h1>
                 <p className="mt-1 text-sm text-slate-500">
-                    Visão global dos clients, regras aplicadas e do motor de resolução DNS.
+                    Visão global de ameaças corporativas, clientes protegidos e telemetria do motor de resolução DNS.
                 </p>
             </div>
 
@@ -132,17 +132,17 @@ export function Dashboard() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
                 {cards.map((card) => {
                     const Icon = card.icon;
                     return (
                         <div
                             key={card.name}
-                            className="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
+                            className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)] hover:shadow-md transition-shadow"
                         >
                             <dt>
-                                <div className="absolute rounded-lg bg-blue-50 p-3">
-                                    <Icon className="h-6 w-6 text-blue-600" aria-hidden="true" />
+                                <div className={`absolute rounded-xl ${card.bg} border ${card.border} p-3`}>
+                                    <Icon className={`h-6 w-6 ${card.iconColor}`} aria-hidden="true" />
                                 </div>
                                 <p className="ml-16 truncate text-sm font-medium text-slate-500">
                                     {card.name}
@@ -161,16 +161,31 @@ export function Dashboard() {
             </div>
 
             {/* Empty State Premium Modificado */}
-            <div className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-12 flex items-center justify-center">
-                <div className="text-center max-w-md">
-                    <div className="mx-auto h-16 w-16 bg-white border border-slate-200 rounded-2xl flex items-center justify-center shadow-sm mb-5">
+            {/* Empty State Premium Modificado com Grid */}
+            <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                {/* Atividades Recentes / Threat Feed */}
+                <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-8 flex flex-col items-center justify-center min-h-[300px] text-center shadow-sm">
+                    <div className="mx-auto h-16 w-16 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center mb-5">
                         <Activity className="h-8 w-8 text-slate-400" />
                     </div>
-                    <h3 className="text-lg font-semibold text-slate-900">Aguardando tráfego DNS dos clientes</h3>
-                    <p className="text-slate-500 mt-2 text-sm leading-relaxed">
-                        Os gráficos de top domínios acessados, queries bloqueadas e atividades em tempo real aparecerão aqui automaticamente quando o tráfego ganhar volume.
+                    <h3 className="text-base font-semibold text-slate-900">Aguardando telemetria em tempo real</h3>
+                    <p className="text-slate-500 mt-2 text-sm max-w-sm">
+                        O painel de monitoramento contínuo será populado automaticamente assim que os dispositivos dos clientes iniciarem o tráfego filtrado através do motor DNS.
                     </p>
                 </div>
+
+                {/* Top Domínios Bloqueados Contexto */}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-8 flex flex-col items-center justify-center min-h-[300px] text-center shadow-sm">
+                    <div className="mx-auto h-12 w-12 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
+                        <ShieldAlert className="h-5 w-5 text-slate-400" />
+                    </div>
+                    <h3 className="text-sm font-medium text-slate-900">Métricas de Ameaças</h3>
+                    <p className="text-slate-500 mt-2 text-xs max-w-[200px]">
+                        Gráficos de domínios restritos e engajamento das regras de parental control e blacklist surgirão aqui.
+                    </p>
+                </div>
+
             </div>
         </div>
     );

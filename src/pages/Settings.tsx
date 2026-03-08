@@ -223,13 +223,13 @@ export function Settings() {
                             <Server className="h-6 w-6" />
                         </div>
                         <div>
-                            <h2 className="text-base font-semibold text-slate-900">Integração com Motor DNS</h2>
-                            <p className="text-sm text-slate-500">Serviço de resolução central (AdGuard Home).</p>
+                            <h2 className="text-base font-semibold text-slate-900">Motor de Resolução DNS</h2>
+                            <p className="text-sm text-slate-500">Conexão com o nó de inspeção central.</p>
                         </div>
                     </div>
                     {settings?.last_connection_status === 'active' ? (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-sm font-medium border border-green-200">
-                            <CheckCircle2 className="h-4 w-4" /> Conectado ao AdGuard
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 text-sm font-medium border border-emerald-200">
+                            <CheckCircle2 className="h-4 w-4" /> Proteção Ativa
                         </div>
                     ) : settings?.last_connection_status === 'error' ? (
                         <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 text-red-700 text-sm font-medium border border-red-200">
@@ -336,8 +336,8 @@ export function Settings() {
                             <ShieldAlert className="h-6 w-6" />
                         </div>
                         <div>
-                            <h2 className="text-base font-semibold text-slate-900">Página de Bloqueio (UX)</h2>
-                            <p className="text-sm text-slate-500">Configuração do redirecionamento transparente de domains (Custom IP).</p>
+                            <h2 className="text-base font-semibold text-slate-900">Gerenciamento da Blockpage</h2>
+                            <p className="text-sm text-slate-500">Configuração de redirecionamento para domínios classificados como ameaça ou restritos.</p>
                         </div>
                     </div>
                 </div>
@@ -345,16 +345,15 @@ export function Settings() {
                 <div className="p-6">
                     <div className="max-w-2xl">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
-                            IP do Nginx (Blockpage Proxy)
+                            IP de Redirecionamento (Custom IP)
                         </label>
-                        <p className="text-sm text-slate-500 mb-3">
-                            Digite o IP externo da máquina que executará o redirecionamento. Pela limitação do protocolo DNS, <strong>este IP deverá obrigatoriamente escutar nas portas 80 (HTTP) e 443 (HTTPS)</strong>.
-                            Deixe vazio para o AdGuard usar NXDOMAIN padrão (página NXDOMAIN que falha em carregar).
+                        <p className="text-sm text-slate-500 mb-4">
+                            Forneça o IP externo que receberá as requisições bloqueadas. Deixe vazio para o modo padrão (Erro nativo no navegador).
                         </p>
                         <div className="flex gap-3">
                             <input
                                 type="text"
-                                placeholder="Ex: 54.232.100.12 ou vazio"
+                                placeholder="Ex: 54.232.100.12"
                                 value={blockpageIp}
                                 onChange={(e) => setBlockpageIp(e.target.value)}
                                 className="block w-full rounded-md border-0 py-2 px-3 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-accent sm:text-sm sm:leading-6"
@@ -376,27 +375,39 @@ export function Settings() {
                             </div>
                         )}
 
-                        <div className="mt-6 p-4 bg-amber-50 rounded-lg text-sm text-amber-800 border border-amber-200">
-                            <strong>Atenção ao Serverless:</strong> Você precisa subir o `Catch-All Nginx` na estrutura listada na documentação para que o painel ZIM DNS (/blocked) possa ser chamado.
-                        </div>
+                        <details className="mt-8 group border border-slate-200 rounded-lg bg-white overflow-hidden shadow-sm">
+                            <summary className="px-4 py-3 bg-slate-50 text-sm font-medium text-slate-700 cursor-pointer hover:bg-slate-100 flex items-center justify-between">
+                                <span className="flex items-center gap-2"><Server className="h-4 w-4 text-slate-400" /> Requisitos de Infraestrutura (Avançado)</span>
+                                <span className="text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+                            </summary>
+                            <div className="p-4 text-xs text-slate-600 space-y-3 leading-relaxed border-t border-slate-200">
+                                <p>
+                                    Como o protocolo DNS não suporta redirecionamento de portas (apenas de IPs), o IP acima exige um servidor proxy local para escutar acessos Web interceptados nas portas HTTP padronizadas.
+                                </p>
+                                <p>
+                                    <strong>Servidor Recomendado:</strong> Instalar um proxy reverso (Nginx) na mesma máquina, escutando a porta 80 e transferindo a carga do DNS interno para outra porta isolada (ex: 3000).
+                                </p>
+                                <p>Consulte as intruções completas no arquivo <code>docs/BLOCKPAGE_SETUP.md</code> para garantir que a proteção responda a nuvem Serverless.</p>
+                            </div>
+                        </details>
                     </div>
                 </div>
             </div>
 
-            {/* Ações Administrativas Adicionais */}
-            <div className="bg-white border border-border shadow-sm rounded-xl overflow-hidden shadow-red-500/5">
+            {/* Ações Administrativas */}
+            <div className="bg-white border border-border shadow-sm rounded-xl overflow-hidden mb-8">
                 <div className="border-b border-border bg-slate-50/50 p-6">
-                    <h2 className="text-base font-semibold text-slate-900">Operações Administrativas Avançadas</h2>
+                    <h2 className="text-base font-semibold text-slate-900">Manutenção da Plataforma</h2>
                     <p className="text-sm text-slate-500 mt-1">
-                        Ferramentas de troubleshooting global e recalibração. Use com responsabilidade.
+                        Ferramentas de sincronização e recalibração.
                     </p>
                 </div>
                 <div className="p-6">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                         <div>
-                            <h4 className="text-sm font-medium text-slate-900">Sincronização em Massa (Force Sync All)</h4>
+                            <h4 className="text-sm font-medium text-slate-900">Sincronização Forçada de Políticas</h4>
                             <p className="text-sm text-slate-500 mt-1 max-w-xl">
-                                Percorre todos os clientes ativos e força o reenvio das políticas individuais de cada um para o motor do AdGuard. Útil após migrações ou recuperações de desastres.
+                                Vasculha todos os clientes ativos e força a retransmissão de suas políticas de acesso ao motor central. Indicado apenas após interrupções de rota.
                             </p>
                         </div>
                         <button
