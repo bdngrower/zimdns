@@ -85,8 +85,25 @@ export default async function handler(req: any, res: any) {
             return clientStr.trim();
         };
 
+        const isClientMatch = (log: any, ips: Set<string>) => {
+            const logIp = log.client_ip || extractIp(log.client) || log.client;
+            for (const validIp of Array.from(ips)) {
+                if (logIp === validIp || (log.client && log.client.includes(validIp))) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if (allLogs.length > 0) {
+            console.log("🟢 ZIM DNS Debug - RAW QUERYLOG SAMPLE (Activity API):", JSON.stringify(allLogs[0], null, 2));
+            console.log(" IPs Validos do Cliente:", Array.from(validIps).join(', '));
+        }
+
         // Filtrar
-        const clientLogs = allLogs.filter((log: any) => validIps.has(extractIp(log.client)));
+        const clientLogs = allLogs.filter((log: any) => isClientMatch(log, validIps));
+
+        console.log(` Matches encontrados (Activity): ${clientLogs.length} / ${allLogs.length}`);
 
         let lastSeenAt = null;
         let blockedCount = 0;

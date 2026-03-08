@@ -75,9 +75,25 @@ export default async function handler(req: any, res: any) {
             return clientStr.trim();
         };
 
+        const isClientMatch = (log: any, ips: Set<string>) => {
+            const logIp = log.client_ip || extractIp(log.client) || log.client;
+            for (const validIp of Array.from(ips)) {
+                if (logIp === validIp || (log.client && log.client.includes(validIp))) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if (allLogs.length > 0) {
+            console.log("🟢 ZIM DNS Debug - RAW QUERYLOG SAMPLE (Logs API):", JSON.stringify(allLogs[0], null, 2));
+            console.log(" IPs Validos do Cliente:", Array.from(validIps).join(', '));
+        }
+
         // Filtrar apenas originados pelos IPs do cliente atual
-        // Formato log adguard pode ser: "189.55.16.97" ou "bd371061.virtua.com.br (189.55.16.97)"
-        const filteredLogs = allLogs.filter((log: any) => validIps.has(extractIp(log.client)));
+        const filteredLogs = allLogs.filter((log: any) => isClientMatch(log, validIps));
+
+        console.log(` Matches encontrados: ${filteredLogs.length} / ${allLogs.length}`);
 
         return res.status(200).json({
             success: true,
