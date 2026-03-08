@@ -26,26 +26,40 @@ export default async function handler(req: any, res: any) {
     };
 
     try {
-        // 1. Total events in the last 24h
+        // 1. DADOS AGREGADOS (Totais das últimas 24h/Hoje)
+        const logDateRaw = new Date().toISOString().split('T')[0];
+        _debug.sourceTableUsed = 'dns_stats_daily';
+
+        const { data: dailyStats, error: qErr } = await supabase
+            .from('dns_stats_daily')
+            .select('queries_total, blocked_total')
+            .eq('date', logDateRaw);
+
+        if (qErr) _debug.errors.push({ query: 'dailyStats', error: qErr });
+
+        let totalQueries = 0;
+        let totalBlockedCount = 0;
+
+        if (dailyStats && dailyStats.length > 0) {
+            dailyStats.forEach(stat => {
+                totalQueries += stat.queries_total || 0;
+                totalBlockedCount += stat.blocked_total || 0;
+            });
+        }
+
+        _debug.totalEventsRead = totalQueries;
+        _debug.blockedEventsRead = totalBlockedCount;
+
+        // 2. Fetch raw events for time-series generation (Only pulling incidents/blocks to save DB!)
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
-        _debug.queryTimeWindow = yesterday.toISOString();
 
-        const { count: totalQueries, error: qErr } = await supabase
-            .from('dns_events')
-            .select('*', { count: 'exact', head: true })
-            .gte('timestamp', yesterday.toISOString());
-
-        if (qErr) _debug.errors.push({ query: 'totalQueries', error: qErr });
-        _debug.totalEventsRead = totalQueries || 0;
-
-        // 2. Fetch raw events for time-series generation (Limited scale to represent chart)
         const { data: rawSeriesData, error: seriesErr } = await supabase
             .from('dns_events')
             .select('timestamp, action')
             .gte('timestamp', yesterday.toISOString())
             .order('timestamp', { ascending: true }) // Ascending for chronological charting
-            .limit(5000); // Fetch up to 5k for reasonable memory grouping 
+            .limit(5000);
 
         if (seriesErr) _debug.errors.push({ query: 'rawSeriesData', error: seriesErr });
 
@@ -65,8 +79,10 @@ export default async function handler(req: any, res: any) {
             rawSeriesData.forEach(ev => {
                 const hourKey = new Date(ev.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }).split(':')[0] + ':00';
                 if (timeSeriesMap[hourKey] !== undefined) {
+                    // Since we no longer save 'allowed' in dns_events, our 'queries' chart line will only reflect incidents.
+                    // For the UI to look good, we map both lines to the incident count or you could hide the queries line.
                     timeSeriesMap[hourKey].queries++;
-                    if (ev.action === 'blocked') {
+                    if (ev.action === 'blocked' || ev.action === 'filtered') {
                         timeSeriesMap[hourKey].blocks++;
                     }
                 }
@@ -75,7 +91,7 @@ export default async function handler(req: any, res: any) {
 
         const chartSeries = Object.entries(timeSeriesMap).map(([time, data]) => ({
             time,
-            queries: data.queries,
+            queries: data.queries, // This now reflects security events
             blocks: data.blocks
         }));
 
@@ -112,10 +128,6 @@ export default async function handler(req: any, res: any) {
 
         if (suggestedErr) _debug.errors.push({ query: 'suggestedData', error: suggestedErr });
         const suggestedDomains = suggestedData || [];
-
-        let totalBlockedCount = 0;
-        chartSeries.forEach(s => totalBlockedCount += s.blocks);
-        _debug.blockedEventsRead = totalBlockedCount;
 
         return res.status(200).json({
             success: true,

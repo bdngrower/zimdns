@@ -191,7 +191,21 @@ CREATE TABLE global_settings (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 16. SYNC_LOGS
+-- 16. DNS_STATS_DAILY
+CREATE TABLE dns_stats_daily (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    date DATE NOT NULL,
+    client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+    queries_total INTEGER DEFAULT 0,
+    blocked_total INTEGER DEFAULT 0,
+    top_domain TEXT,
+    top_blocked_domain TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(client_id, date)
+);
+
+-- 17. SYNC_LOGS
 CREATE TABLE sync_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
@@ -204,7 +218,7 @@ CREATE TABLE sync_logs (
     finished_at TIMESTAMPTZ
 );
 
--- 17. SUGGESTED_DOMAINS
+-- 18. SUGGESTED_DOMAINS
 CREATE TABLE suggested_domains (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     domain TEXT NOT NULL,
@@ -233,6 +247,7 @@ CREATE TRIGGER tr_block_categories_updated_at BEFORE UPDATE ON block_categories 
 CREATE TRIGGER tr_manual_rules_updated_at BEFORE UPDATE ON manual_rules FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 CREATE TRIGGER tr_block_pages_updated_at BEFORE UPDATE ON block_pages FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 CREATE TRIGGER tr_global_settings_updated_at BEFORE UPDATE ON global_settings FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+CREATE TRIGGER tr_dns_stats_daily_updated_at BEFORE UPDATE ON dns_stats_daily FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 -- RLS POLICIES (Básica)
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;

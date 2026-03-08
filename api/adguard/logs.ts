@@ -160,13 +160,24 @@ export default async function handler(req: any, res: any) {
 
         try {
             const crypto = await import('crypto');
+
+            let totalQueriesToCount = 0;
+            let totalBlockedToCount = 0;
+            const logDateRaw = new Date().toISOString().split('T')[0]; // Current UTC date
+
             const dbEvents = formattedLogs.map((log: any) => {
                 const timestamp = log.time; // O AdGuard já retorna em ISO 8601 string
                 const domain = log.queriedDomain;
                 const source_ip = extractIp(log.client_ip || log.client || '');
                 const client_id = clientId;
 
-                // Hash única do evento baseada nos dados essenciais para previnir dupes no polling de X em X segundos
+                const action = log.reason === 'NotFiltered' || log.reason === '' ? 'processed' : 'blocked';
+
+                // Aggregation logic
+                totalQueriesToCount++;
+                if (action === 'blocked') totalBlockedToCount++;
+
+                // Hash única do evento
                 const event_hash = crypto.createHash('sha256')
                     .update(`${timestamp}-${domain}-${source_ip}-${client_id}`)
                     .digest('hex');
@@ -176,26 +187,23 @@ export default async function handler(req: any, res: any) {
                     client_id,
                     domain,
                     query_type: log.queryType,
-                    // O Adguard tem action = 'Filtered' / 'Blocked' ou 'Processed'
-                    action: log.reason === 'NotFiltered' || log.reason === '' ? 'processed' : 'blocked',
+                    action,
                     rule: log.rule || log.reason || null,
                     source_ip,
                     latency_ms: Math.round(parseFloat(log.elapsedMs || 0)),
                     event_hash
                 };
-            });
+            }).filter((ev: any) => ev.action === 'blocked' || ev.rule !== null); // Filter out pure 'allowed'/processed events without rules
 
             ingestionDebug.eventsPrepared = dbEvents.length;
+
+            const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey;
+            const supabaseAdmin = createClient(supabaseUrl, adminKey);
 
             if (dbEvents.length > 0) {
                 ingestionDebug.attempted = true;
 
-                // Utilizando service_role para burlar RLS e forcar a ingestão server-side, 
-                // pois tokens anonimos sem Auth explítico do front falham nas policies de INSERT se elas demandam token logado.
-                const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey;
-                const supabaseAdmin = createClient(supabaseUrl, adminKey);
-
-                // Bulk insert no Supabase com "on conflict do nothing" para as duplicatas contínuas
+                // Bulk insert no Supabase com "on conflict do nothing"
                 const { data: insertedData, error: ingestErr } = await supabaseAdmin
                     .from('dns_events')
                     .upsert(dbEvents, { onConflict: 'event_hash', ignoreDuplicates: true })
@@ -206,13 +214,44 @@ export default async function handler(req: any, res: any) {
                     ingestionDebug.errors.push(ingestErr);
                 } else {
                     ingestionDebug.insertedCount = insertedData ? insertedData.length : 0;
-                    console.log(`🟢 ZIM DNS Telemetry Ingestion Success: ${ingestionDebug.insertedCount} novos registros salvos.`);
+                    console.log(`🟢 ZIM DNS Telemetry Ingestion Success: ${ingestionDebug.insertedCount} novos registros de segurança salvos.`);
                 }
             }
+
+            // Daily Stats Aggregation Upsert (sempre executado se houver fluxo lido do adguard)
+            if (totalQueriesToCount > 0) {
+                // To avoid massive reads on the supabase side, we use an RPC or direct upsert if constraints are met.
+                // Since Supabase REST doesn't easily allow "increment existing row" dynamically without RPC on simple upserts,
+                // the safest pattern from a Serverless function is read -> add -> write OR rely on Postgres RPC.
+                // As a fallback MVP we will use standard upsert if RPC is unavailable, but here we can just call an RPC for increment or do a read/add.
+
+                // Fetch first:
+                const { data: existingStat } = await supabaseAdmin
+                    .from('dns_stats_daily')
+                    .select('id, queries_total, blocked_total')
+                    .eq('client_id', clientId)
+                    .eq('date', logDateRaw)
+                    .maybeSingle();
+
+                const upsertStat = {
+                    client_id: clientId,
+                    date: logDateRaw,
+                    queries_total: (existingStat?.queries_total || 0) + totalQueriesToCount,
+                    blocked_total: (existingStat?.blocked_total || 0) + totalBlockedToCount
+                };
+
+                const { error: statErr } = await supabaseAdmin
+                    .from('dns_stats_daily')
+                    .upsert(upsertStat, { onConflict: 'client_id, date' });
+
+                if (statErr) {
+                    console.error("🔴 ZIM DNS Daily Stats Update Error:", statErr);
+                }
+            }
+
         } catch (ingestionError: any) {
             console.error("🔴 ZIM DNS Telemetry Generic Pipeline Error:", ingestionError);
             ingestionDebug.errors.push(ingestionError.message || ingestionError);
-            // Nós prosseguimos ignorando para não deixar a interface do cliente cair caso o DB engasgue
         }
 
         // Incorpora os logs de debug no retorno
