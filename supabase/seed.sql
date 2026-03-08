@@ -167,7 +167,7 @@ INSERT INTO block_pages (tenant_id, title, subtitle, primary_color) VALUES
 
 -- 10. Inserir provedores de Public Blocklists (OISD, 1Hosts, AdGuard)
 INSERT INTO blocklist_sources (id, name, url, enabled) VALUES
-    ('c0000000-0000-0000-0000-000000000001', 'OISD Basic', 'https://big.oisd.nl/domainswild', true),
+    ('c0000000-0000-0000-0000-000000000001', 'OISD Big', 'https://big.oisd.nl/domainswild', true),
     ('c0000000-0000-0000-0000-000000000002', '1Hosts Lite', 'https://o0.pages.dev/Lite/domains.txt', true),
     ('c0000000-0000-0000-0000-000000000003', 'AdGuard DNS Filter', 'https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt', true),
     ('c0000000-0000-0000-0000-000000000004', 'BlockListProject Ads', 'https://blocklistproject.github.io/Lists/alt-version/ads-nl.txt', true),
