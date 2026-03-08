@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import type { GlobalSettings } from '../types';
-import { Server, Activity, AlertCircle, CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
+import { Server, Activity, AlertCircle, CheckCircle2, Loader2, ArrowRight, RefreshCw } from 'lucide-react';
 
 export function Settings() {
     const [settings, setSettings] = useState<GlobalSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isTesting, setIsTesting] = useState(false);
+    const [isSyncingAll, setIsSyncingAll] = useState(false);
+    const [syncResult, setSyncResult] = useState<{ success: number; failed: number; total: number } | null>(null);
+
     const [testResult, setTestResult] = useState<{
         success: boolean;
         message: string;
@@ -111,6 +114,51 @@ export function Settings() {
         }
     };
 
+    const handleSyncAll = async () => {
+        if (!confirm('Deseja forçar a sincronização DNS de TODOS os clientes ativos agora?')) return;
+        setIsSyncingAll(true);
+        setSyncResult(null);
+
+        try {
+            // Pegar clientes ativos
+            const { data: clients } = await supabase.from('clients').select('id').eq('status', 'active');
+            if (!clients || clients.length === 0) {
+                setSyncResult({ success: 0, failed: 0, total: 0 });
+                setIsSyncingAll(false);
+                return;
+            }
+
+            let successCount = 0;
+            let failedCount = 0;
+
+            // Fazer chamadas sequenciais para nao derrubar
+            for (const client of clients) {
+                try {
+                    const res = await fetch('/api/adguard/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ clientId: client.id })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        successCount++;
+                    } else {
+                        failedCount++;
+                    }
+                } catch {
+                    failedCount++;
+                }
+            }
+
+            setSyncResult({ success: successCount, failed: failedCount, total: clients.length });
+        } catch (error) {
+            console.error("Sync all failed:", error);
+            alert("Erro catastrófico ao iniciar sincronia.");
+        } finally {
+            setIsSyncingAll(false);
+        }
+    };
+
     if (isLoading) {
         return <div className="p-8 text-center text-slate-500">Caregando configurações...</div>;
     }
@@ -124,7 +172,7 @@ export function Settings() {
                 </p>
             </div>
 
-            <div className="bg-white border border-border shadow-sm rounded-xl overflow-hidden">
+            <div className="bg-white border border-border shadow-sm rounded-xl overflow-hidden mb-8">
                 <div className="border-b border-border bg-slate-50/50 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                         <div className="p-3 bg-blue-50 text-accent rounded-lg border border-blue-100">
@@ -183,15 +231,15 @@ export function Settings() {
                                 </p>
                                 {settings?.last_connection_check_at && (
                                     <p className="text-xs text-slate-400 mt-2 block">
-                                        Último teste local: {new Date(settings.last_connection_check_at).toLocaleString()}
+                                        Último teste local: {new Date(settings.last_connection_check_at).toLocaleString('pt-BR')}
                                     </p>
                                 )}
                             </div>
 
                             <button
                                 onClick={testConnection}
-                                disabled={isTesting}
-                                className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50"
+                                disabled={isTesting || isSyncingAll}
+                                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50"
                             >
                                 {isTesting ? <Loader2 className="h-4 w-4 animate-spin text-slate-400" /> : <Activity className="h-4 w-4 text-accent" />}
                                 Testar conexão
@@ -233,9 +281,45 @@ export function Settings() {
                     <div className="flex items-center gap-2 text-sm text-slate-500">
                         Modo Serverless <ArrowRight className="h-3 w-3" /> Seguro e Oculto
                     </div>
-                    <button className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-accent">
-                        Salvar Configuração
-                    </button>
+                </div>
+            </div>
+
+            {/* Ações Administrativas Adicionais */}
+            <div className="bg-white border border-border shadow-sm rounded-xl overflow-hidden shadow-red-500/5">
+                <div className="border-b border-border bg-slate-50/50 p-6">
+                    <h2 className="text-base font-semibold text-slate-900">Operações Administrativas Avançadas</h2>
+                    <p className="text-sm text-slate-500 mt-1">
+                        Ferramentas de troubleshooting global e recalibração. Use com responsabilidade.
+                    </p>
+                </div>
+                <div className="p-6">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div>
+                            <h4 className="text-sm font-medium text-slate-900">Sincronização em Massa (Force Sync All)</h4>
+                            <p className="text-sm text-slate-500 mt-1 max-w-xl">
+                                Percorre todos os clientes ativos e força o reenvio das políticas individuais de cada um para o motor do AdGuard. Útil após migrações ou recuperações de desastres.
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleSyncAll}
+                            disabled={isSyncingAll || isTesting}
+                            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-white border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50"
+                        >
+                            {isSyncingAll ? <Loader2 className="h-4 w-4 animate-spin text-slate-500" /> : <RefreshCw className="h-4 w-4 text-slate-500" />}
+                            Sincronizar Todos
+                        </button>
+                    </div>
+
+                    {syncResult && (
+                        <div className="mt-4 p-4 rounded-lg border bg-slate-50 border-slate-200">
+                            <h5 className="text-sm font-semibold text-slate-900 mb-2">Resultado da Sincronização em Lote</h5>
+                            <div className="grid grid-cols-3 gap-4 text-sm">
+                                <div className="text-slate-600">Total processados: <span className="font-bold text-slate-900">{syncResult.total}</span></div>
+                                <div className="text-green-600">Sucesso: <span className="font-bold">{syncResult.success}</span></div>
+                                <div className="text-red-600">Falhas: <span className="font-bold">{syncResult.failed}</span></div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

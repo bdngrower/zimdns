@@ -2,22 +2,39 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Client } from '../../types';
-import { ArrowLeft, Settings, ShieldAlert, List, Paintbrush, Network, Server, RefreshCw, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Settings, ShieldAlert, List, Paintbrush, Network, Loader2, AlertCircle, CheckCircle2, Clock, Activity, Zap } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { BlockSwitches } from './BlockSwitches';
 import { ManualRules } from './ManualRules';
 import { BlockPageSettings } from './BlockPageSettings';
 import { NetworkOrigins } from './NetworkOrigins';
 import { DnsLogs } from './DnsLogs';
-import { Activity } from 'lucide-react';
+
+function SyncStatusBadge({ syncStatus }: { syncStatus?: string }) {
+    const config = {
+        success: { icon: CheckCircle2, label: 'Sincronizado com DNS', color: 'bg-green-50 text-green-700 border-green-200', dot: 'bg-green-500' },
+        pending: { icon: Clock, label: 'Alterações pendentes', color: 'bg-yellow-50 text-yellow-700 border-yellow-200', dot: 'bg-yellow-500' },
+        error: { icon: AlertCircle, label: 'Falha na sincronização', color: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' },
+        warning: { icon: AlertCircle, label: 'Sincronização parcial', color: 'bg-orange-50 text-orange-700 border-orange-200', dot: 'bg-orange-500' },
+    } as Record<string, any>;
+
+    const c = config[syncStatus || ''] || config.pending;
+    const Icon = c.icon;
+
+    return (
+        <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border ${c.color}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`}></span>
+            <Icon className="h-3 w-3" />
+            {c.label}
+        </div>
+    );
+}
 
 export function ClientDetails() {
     const { id } = useParams();
     const [client, setClient] = useState<Client | null>(null);
     const [activeTab, setActiveTab] = useState('dashboard');
     const [isLoading, setIsLoading] = useState(true);
-    const [isSyncing, setIsSyncing] = useState(false);
-    const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'warning' | 'error', text: string } | null>(null);
     const [syncLogs, setSyncLogs] = useState<any[]>([]);
     const [dnsActivity, setDnsActivity] = useState<any>(null);
     const [isLoadingActivity, setIsLoadingActivity] = useState(true);
@@ -55,19 +72,14 @@ export function ClientDetails() {
                 console.log("🟠 ZIM DNS Frontend - Raw Activity Response:", data);
                 if (data._debug) {
                     console.log("🟢 ZIM DNS Frontend - Activity _debug payload:", data._debug);
-                } else {
-                    console.log("🔴 ZIM DNS Frontend - Activity _debug payload MISSING in response.");
                 }
-
                 if (data.success && data.data) {
                     setDnsActivity(data.data);
                 } else {
-                    console.warn("🟡 ZIM DNS Frontend - Activity request returned success: false or invalid payload.");
                     setDnsActivity({ isActive: false });
                 }
             })
-            .catch((err) => {
-                console.error("🔴 ZIM DNS Frontend - Error communicating with Activity API:", err);
+            .catch(() => {
                 setDnsActivity({ isActive: false });
             })
             .finally(() => setIsLoadingActivity(false));
@@ -79,37 +91,6 @@ export function ClientDetails() {
         loadClient();
     }, [id]);
 
-    const handleSync = async () => {
-        if (!client) return;
-        setIsSyncing(true);
-        setSyncMessage(null);
-
-        try {
-            const response = await fetch('/api/adguard/sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ clientId: client.id })
-            });
-
-            const result = await response.json();
-
-            if (result.success && !result.warning) {
-                setSyncMessage({ type: 'success', text: 'Sincronização processada e aplicada 100% no motor!' });
-                await loadClient();
-            } else if (result.success && result.warning) {
-                setSyncMessage({ type: 'warning', text: result.message || 'Regras enviadas, mas faltam no motor atuante.' });
-                await loadClient();
-            } else {
-                setSyncMessage({ type: 'error', text: result.message || 'Falha ao sincronizar' });
-                await loadClient();
-            }
-        } catch (error: any) {
-            setSyncMessage({ type: 'error', text: `Erro de rede: ${error.message}` });
-        } finally {
-            setIsSyncing(false);
-        }
-    };
-
     if (isLoading && !client) {
         return <div className="p-8 text-slate-500 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Recuperando cliente...</div>;
     }
@@ -119,10 +100,10 @@ export function ClientDetails() {
     }
 
     const tabs = [
-        { id: 'dashboard', name: 'Visão Geral e Sync', icon: Settings },
+        { id: 'dashboard', name: 'Visão Geral', icon: Zap },
+        { id: 'blocks', name: 'Políticas de Bloqueio', icon: ShieldAlert },
         { id: 'network', name: 'Origens de Rede', icon: Network },
         { id: 'dns_logs', name: 'Consultas DNS', icon: Activity },
-        { id: 'blocks', name: 'Bloqueios (Switches)', icon: ShieldAlert },
         { id: 'rules', name: 'Regras Manuais', icon: List },
         { id: 'blockpage', name: 'Página de Bloqueio', icon: Paintbrush },
     ];
@@ -137,7 +118,7 @@ export function ClientDetails() {
                     </Link>
                     <div className="flex items-center gap-4">
                         <h1 className="text-2xl font-bold tracking-tight text-slate-900">{client.name}</h1>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
                             <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border ${client.status === 'active'
                                 ? 'bg-slate-100 text-slate-700 border-slate-200'
                                 : 'bg-red-50 text-red-700 border-red-200'
@@ -154,6 +135,7 @@ export function ClientDetails() {
                                     }`}></span>
                                 {isLoadingActivity ? 'Verificando DNS...' : dnsActivity?.isActive ? 'Tráfego DNS Ativo' : 'Sem tráfego detectado'}
                             </span>
+                            <SyncStatusBadge syncStatus={client.sync_status} />
                         </div>
                     </div>
                 </div>
@@ -202,6 +184,7 @@ export function ClientDetails() {
             <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm min-h-[400px]">
                 {activeTab === 'dashboard' && (
                     <div className="space-y-8">
+                        {/* Resumo do Perfil */}
                         <div>
                             <h3 className="text-lg font-semibold text-slate-900 mb-4">Resumo do Perfil</h3>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50/50 p-6 rounded-xl border border-slate-200">
@@ -258,7 +241,7 @@ export function ClientDetails() {
                                         <p className="text-sm font-bold text-slate-900 truncate">
                                             {dnsActivity.matchedOrigins?.join(', ') || '-'}
                                         </p>
-                                        <p className="text-xs text-slate-400 mt-1">IP(s) origem detectos</p>
+                                        <p className="text-xs text-slate-400 mt-1">IP(s) origem detectados</p>
                                     </div>
                                 </div>
                             ) : (
@@ -274,63 +257,36 @@ export function ClientDetails() {
                             )}
                         </div>
 
+                        {/* Status da Sincronização - compacto */}
                         <div>
-                            <h3 className="text-lg font-semibold text-slate-900 mb-4">Integração AdGuard</h3>
-                            <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-6 rounded-xl border border-slate-200 shadow-sm gap-6">
-                                <div className="flex items-start gap-5">
-                                    <div className={`p-4 rounded-xl shrink-0 ${client.sync_status === 'success' ? 'bg-green-50/80 border border-green-100 text-green-600' : client.sync_status === 'warning' ? 'bg-yellow-50/80 border border-yellow-200 text-yellow-600' : client.sync_status === 'error' ? 'bg-red-50/80 border border-red-100 text-red-600' : 'bg-slate-50 border border-slate-200 text-slate-500'}`}>
-                                        <Server className="h-6 w-6" />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-semibold text-slate-900">Estado da Transmissão de Regras</p>
-                                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                                            <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${client.sync_status === 'success' ? 'bg-green-50 text-green-700 ring-green-600/20' :
-                                                client.sync_status === 'warning' ? 'bg-yellow-50 text-yellow-800 ring-yellow-600/20' :
-                                                    client.sync_status === 'error' ? 'bg-red-50 text-red-700 ring-red-600/20' :
-                                                        'bg-slate-50 text-slate-600 ring-slate-500/10'
-                                                }`}>
-                                                {client.sync_status === 'success' ? 'Operação Completa' : client.sync_status === 'warning' ? 'Sucesso Parcial' : client.sync_status === 'error' ? 'Falha Operacional' : 'Aguardando Sincronia'}
-                                            </span>
-                                        </div>
-                                        <div className="mt-2 text-sm text-slate-500">
-                                            Último evento processado: {client.last_sync_at ? new Date(client.last_sync_at).toLocaleString('pt-BR') : 'Sem registros'}
-                                        </div>
-
-                                        {(client.sync_status === 'error' || client.sync_status === 'warning') && client.sync_error_message && (
-                                            <div className={`mt-3 p-3 text-xs rounded-lg border flex items-start gap-2 ${client.sync_status === 'error' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-yellow-50 text-yellow-800 border-yellow-200'}`}>
-                                                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                                                <span>{client.sync_error_message}</span>
-                                            </div>
-                                        )}
+                            <h3 className="text-lg font-semibold text-slate-900 mb-4">Status de Sincronização</h3>
+                            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <SyncStatusBadge syncStatus={client.sync_status} />
+                                        <span className="text-sm text-slate-500">
+                                            {client.last_sync_at
+                                                ? `Última sincronização: ${new Date(client.last_sync_at).toLocaleString('pt-BR')}`
+                                                : 'Nenhuma sincronização registrada'
+                                            }
+                                        </span>
                                     </div>
                                 </div>
-                                <div className="shrink-0">
-                                    <button
-                                        onClick={handleSync}
-                                        disabled={isSyncing}
-                                        className="w-full md:w-auto flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50 transition-colors"
-                                    >
-                                        {isSyncing ? <Loader2 className="h-4 w-4 animate-spin text-slate-300" /> : <RefreshCw className="h-4 w-4 text-slate-300" />}
-                                        {isSyncing ? 'Sincronizando Políticas...' : 'Forçar Sincronia de DNS'}
-                                    </button>
+                                {client.sync_error_message && (client.sync_status === 'error' || client.sync_status === 'warning') && (
+                                    <div className={`mt-3 p-3 text-xs rounded-lg border flex items-start gap-2 ${client.sync_status === 'error' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-yellow-50 text-yellow-800 border-yellow-200'}`}>
+                                        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                                        <span>{client.sync_error_message}</span>
+                                    </div>
+                                )}
+                                <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/30 p-3">
+                                    <p className="text-xs text-blue-800/80 leading-relaxed">
+                                        <span className="font-semibold text-blue-900">Sync automático:</span> As políticas de bloqueio são aplicadas automaticamente no motor DNS ao ativar ou desativar switches na aba "Políticas de Bloqueio".
+                                    </p>
                                 </div>
-                            </div>
-
-                            {syncMessage && (
-                                <div className={`mt-4 p-4 rounded-xl flex items-start gap-3 text-sm border ${syncMessage.type === 'success' ? 'bg-green-50/50 border-green-200 text-green-800' : 'bg-red-50/50 border-red-200 text-red-800'
-                                    }`}>
-                                    {syncMessage.type === 'success' ? <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600" /> : <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />}
-                                    <span className="leading-relaxed">{syncMessage.text}</span>
-                                </div>
-                            )}
-
-                            <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/30 p-4">
-                                <p className="text-sm text-blue-800/80 leading-relaxed">
-                                    <span className="font-semibold text-blue-900">Como funciona:</span> O processo de "Forçar Sincronia" empacota as origens de rede deste client e suas configurações de bloqueio engessando o payload pro ecossistema central AdGuard.
-                                </p>
                             </div>
                         </div>
 
+                        {/* Histórico de Sync - colapsado */}
                         {syncLogs.length > 0 && (
                             <div>
                                 <h3 className="text-sm font-semibold text-slate-900 mb-3 ml-1">Histórico Recente de Sincronização</h3>
@@ -374,16 +330,16 @@ export function ClientDetails() {
                     </div>
                 )}
 
+                {activeTab === 'blocks' && (
+                    <BlockSwitches clientId={client.id} />
+                )}
+
                 {activeTab === 'network' && (
                     <NetworkOrigins clientId={client.id} />
                 )}
 
                 {activeTab === 'dns_logs' && (
                     <DnsLogs clientId={client.id} />
-                )}
-
-                {activeTab === 'blocks' && (
-                    <BlockSwitches clientId={client.id} />
                 )}
 
                 {activeTab === 'rules' && (
