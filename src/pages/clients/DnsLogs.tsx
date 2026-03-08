@@ -79,9 +79,11 @@ export function DnsLogs({ clientId }: DnsLogsProps) {
                         <thead className="bg-slate-50">
                             <tr>
                                 <th className="px-4 py-3 font-medium text-slate-500 text-left">Horário</th>
+                                <th className="px-4 py-3 font-medium text-slate-500 text-left">Tempo</th>
+                                <th className="px-4 py-3 font-medium text-slate-500 text-left">Tipo</th>
                                 <th className="px-4 py-3 font-medium text-slate-500 text-left">Domínio Consultado</th>
-                                <th className="px-4 py-3 font-medium text-slate-500 text-left">Bloqueado?</th>
-                                <th className="px-4 py-3 font-medium text-slate-500 text-left">Regra Base</th>
+                                <th className="px-4 py-3 font-medium text-slate-500 text-left">Status (Ação)</th>
+                                <th className="px-4 py-3 font-medium text-slate-500 text-left">Motivo / Regra Base</th>
                                 <th className="px-4 py-3 font-medium text-slate-500 text-left">IP de Origem</th>
                             </tr>
                         </thead>
@@ -93,6 +95,12 @@ export function DnsLogs({ clientId }: DnsLogsProps) {
                                         <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
                                             {new Date(log.time).toLocaleTimeString('pt-BR')}
                                         </td>
+                                        <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs">
+                                            {log.elapsedMs ? `${log.elapsedMs}ms` : '-'}
+                                        </td>
+                                        <td className="px-4 py-3 text-slate-500 font-mono text-xs">
+                                            {log.question?.type || '-'}
+                                        </td>
                                         <td className="px-4 py-3 font-medium text-slate-900">
                                             {log.question?.host}
                                         </td>
@@ -103,12 +111,12 @@ export function DnsLogs({ clientId }: DnsLogsProps) {
                                                 </span>
                                             ) : (
                                                 <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20">
-                                                    <ShieldCheck className="w-3.5 h-3.5" /> Permitido
+                                                    <ShieldCheck className="w-3.5 h-3.5" /> Processado
                                                 </span>
                                             )}
                                         </td>
                                         <td className="px-4 py-3 text-slate-500 max-w-[200px] truncate" title={log.rule}>
-                                            {isBlocked ? log.rule : '-'}
+                                            {isBlocked ? log.rule : 'N/A'}
                                         </td>
                                         <td className="px-4 py-3 text-slate-500">
                                             {log.client}

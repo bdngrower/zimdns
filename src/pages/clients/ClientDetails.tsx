@@ -19,7 +19,8 @@ export function ClientDetails() {
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'warning' | 'error', text: string } | null>(null);
     const [syncLogs, setSyncLogs] = useState<any[]>([]);
-    const [trafficDetected, setTrafficDetected] = useState<boolean | null>(null);
+    const [dnsActivity, setDnsActivity] = useState<any>(null);
+    const [isLoadingActivity, setIsLoadingActivity] = useState(true);
 
     async function loadClient() {
         if (!id) return;
@@ -46,17 +47,19 @@ export function ClientDetails() {
             setSyncLogs(logsData);
         }
 
-        // Verificar trafego assincronamente (não bloqueante)
-        fetch(`/api/adguard/logs?clientId=${id}`)
+        // Verificar atividade dns
+        setIsLoadingActivity(true);
+        fetch(`/api/adguard/activity?clientId=${id}`)
             .then(res => res.json())
             .then(data => {
-                if (data.success && data.logs && data.logs.length > 0) {
-                    setTrafficDetected(true);
+                if (data.success && data.data) {
+                    setDnsActivity(data.data);
                 } else {
-                    setTrafficDetected(false);
+                    setDnsActivity({ isActive: false });
                 }
             })
-            .catch(() => setTrafficDetected(false));
+            .catch(() => setDnsActivity({ isActive: false }))
+            .finally(() => setIsLoadingActivity(false));
 
         setIsLoading(false);
     }
@@ -130,15 +133,15 @@ export function ClientDetails() {
                                 }`}>
                                 Conta: {client.status === 'active' ? 'Ativa' : 'Inativa'}
                             </span>
-                            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border ${trafficDetected === true ? 'bg-green-50 text-green-700 border-green-200' :
-                                    trafficDetected === false ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border ${dnsActivity?.isActive ? 'bg-green-50 text-green-700 border-green-200' :
+                                    (dnsActivity && !dnsActivity.isActive) ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
                                         'bg-slate-100 text-slate-600 border-slate-200'
                                 }`}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${trafficDetected === true ? 'bg-green-600' :
-                                        trafficDetected === false ? 'bg-yellow-500' :
+                                <span className={`h-1.5 w-1.5 rounded-full ${dnsActivity?.isActive ? 'bg-green-600' :
+                                        (dnsActivity && !dnsActivity.isActive) ? 'bg-yellow-500' :
                                             'bg-slate-400'
                                     }`}></span>
-                                {trafficDetected === true ? 'Tráfego DNS Ativo' : trafficDetected === false ? 'Sem tráfego detectado' : 'Verificando DNS...'}
+                                {isLoadingActivity ? 'Verificando DNS...' : dnsActivity?.isActive ? 'Tráfego DNS Ativo' : 'Sem tráfego detectado'}
                             </span>
                         </div>
                     </div>
@@ -204,6 +207,60 @@ export function ClientDetails() {
                                     <p className="mt-2 text-slate-900 font-medium">{client.phone || '—'}</p>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Telemetria DNS */}
+                        <div>
+                            <h3 className="text-lg font-semibold text-slate-900 mb-4">Telemetria Operacional</h3>
+                            {isLoadingActivity ? (
+                                <div className="border border-slate-200 bg-white p-8 rounded-xl shadow-sm flex flex-col items-center justify-center text-slate-500">
+                                    <Loader2 className="h-6 w-6 animate-spin mb-2" />
+                                    <span className="text-sm">Acessando roteadores de borda...</span>
+                                </div>
+                            ) : dnsActivity?.isActive ? (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                                        <p className="text-sm font-medium text-slate-500 mb-1">Status Operacional</p>
+                                        <div className="flex items-center gap-2">
+                                            <span className="h-2.5 w-2.5 rounded-full bg-green-500"></span>
+                                            <span className="text-lg font-semibold text-slate-900">Online</span>
+                                        </div>
+                                        <p className="text-xs text-slate-400 mt-2">
+                                            Último acesso: {new Date(dnsActivity.lastSeenAt).toLocaleTimeString('pt-BR')}
+                                        </p>
+                                    </div>
+
+                                    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                                        <p className="text-sm font-medium text-slate-500 mb-1">Consultas</p>
+                                        <p className="text-2xl font-bold text-slate-900">{dnsActivity.queryCount}</p>
+                                        <p className="text-xs text-slate-400 mt-1">resolvidas recentemente</p>
+                                    </div>
+
+                                    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                                        <p className="text-sm font-medium text-slate-500 mb-1">Bloqueios</p>
+                                        <p className="text-2xl font-bold text-red-600">{dnsActivity.blockedCount}</p>
+                                        <p className="text-xs text-slate-400 mt-1">ameaças neutralizadas</p>
+                                    </div>
+
+                                    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                                        <p className="text-sm font-medium text-slate-500 mb-1">Identificação Real</p>
+                                        <p className="text-sm font-bold text-slate-900 truncate">
+                                            {dnsActivity.matchedOrigins?.join(', ') || '-'}
+                                        </p>
+                                        <p className="text-xs text-slate-400 mt-1">IP(s) origem detectos</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="border border-yellow-200 bg-yellow-50/50 p-6 rounded-xl shadow-sm">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <AlertCircle className="h-5 w-5 text-yellow-600" />
+                                        <h4 className="font-semibold text-yellow-800">Aguardando Tráfego</h4>
+                                    </div>
+                                    <p className="text-sm text-yellow-700/80 ml-8">
+                                        O painel central ainda não recebeu requisições DNS originadas a partir dos IPs cadastrados para este cliente. Certifique-se de que os roteadores do cliente estão apontando para o endereço IP do ZIM DNS.
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         <div>
