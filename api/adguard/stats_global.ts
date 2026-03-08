@@ -129,12 +129,20 @@ export default async function handler(req: any, res: any) {
         if (suggestedErr) _debug.errors.push({ query: 'suggestedData', error: suggestedErr });
         const suggestedDomains = suggestedData || [];
 
+        // 5. Threat Intelligence Global Count (Volume do Firewall)
+        const { count: threatCount, error: threatErr } = await supabase
+            .from('blocklist_domains')
+            .select('*', { count: 'exact', head: true });
+
+        if (threatErr) _debug.errors.push({ query: 'threatCount', error: threatErr });
+
         return res.status(200).json({
             success: true,
             _debug,
             stats: {
                 totalQueries24h: totalQueries || 0,
                 totalBlocked24h: totalBlockedCount,
+                threatsCataloged: threatCount || 0,
                 topDomains,
                 chartSeries,
                 suggestedDomains

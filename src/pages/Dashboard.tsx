@@ -10,7 +10,8 @@ export function Dashboard() {
         categories: 0,
         services: 0,
         totalQueries24h: 0,
-        totalBlocked24h: 0
+        totalBlocked24h: 0,
+        threatsCataloged: 0
     });
     const [topDomains, setTopDomains] = useState<{ domain: string, count: number }[]>([]);
     const [chartSeries, setChartSeries] = useState<{ time: string, queries: number, blocks: number }[]>([]);
@@ -49,6 +50,7 @@ export function Dashboard() {
             let tDomains: any[] = [];
             let tSeries: any[] = [];
             let tSuggested: any[] = [];
+            let tThreats = 0;
 
             try {
                 const statsRes = await fetch('/api/adguard/stats_global');
@@ -64,6 +66,7 @@ export function Dashboard() {
                     tDomains = statsData.stats.topDomains;
                     tSeries = statsData.stats.chartSeries || [];
                     tSuggested = statsData.stats.suggestedDomains || [];
+                    tThreats = statsData.stats.threatsCataloged || 0;
                 }
             } catch (e) {
                 console.error("Dashboard failed to fetch stats_global:", e);
@@ -76,7 +79,8 @@ export function Dashboard() {
                 categories: 0,
                 services: 0,
                 totalQueries24h: tQueries,
-                totalBlocked24h: tBlocked
+                totalBlocked24h: tBlocked,
+                threatsCataloged: tThreats
             });
 
             setTopDomains(tDomains);
@@ -114,11 +118,13 @@ export function Dashboard() {
         loadData();
     }, []);
 
+    const IntlNumber = new Intl.NumberFormat('pt-BR', { notation: "compact", compactDisplay: "short" });
+
     const cards = [
-        { name: 'Clientes Protegidos', value: stats.clients, icon: Users, iconColor: 'text-indigo-600', bg: 'bg-indigo-50/80', border: 'border-indigo-100' },
-        { name: 'Regras Manuais Ativas', value: stats.rules, icon: ShieldAlert, iconColor: 'text-rose-600', bg: 'bg-rose-50/80', border: 'border-rose-100' },
-        { name: 'Consultas DNS (24h)', value: stats.totalQueries24h.toLocaleString(), icon: Activity, iconColor: 'text-emerald-600', bg: 'bg-emerald-50/80', border: 'border-emerald-100' },
-        { name: 'Bloqueios Atuados (24h)', value: stats.totalBlocked24h.toLocaleString(), icon: Globe, iconColor: 'text-amber-600', bg: 'bg-amber-50/80', border: 'border-amber-100' },
+        { name: 'Redes Privadas/Clientes', value: stats.clients, icon: Users, iconColor: 'text-indigo-600', bg: 'bg-indigo-50/80', border: 'border-indigo-100' },
+        { name: 'Ameaças (Blocklist)', value: stats.threatsCataloged > 0 ? IntlNumber.format(stats.threatsCataloged) : '0', icon: ShieldAlert, iconColor: 'text-rose-600', bg: 'bg-rose-50/80', border: 'border-rose-100' },
+        { name: 'Consultas DNS (24h)', value: stats.totalQueries24h > 0 ? IntlNumber.format(stats.totalQueries24h) : '0', icon: Activity, iconColor: 'text-emerald-600', bg: 'bg-emerald-50/80', border: 'border-emerald-100' },
+        { name: 'Bloqueios Atuados (24h)', value: stats.totalBlocked24h > 0 ? IntlNumber.format(stats.totalBlocked24h) : '0', icon: Globe, iconColor: 'text-amber-600', bg: 'bg-amber-50/80', border: 'border-amber-100' },
     ];
 
     return (

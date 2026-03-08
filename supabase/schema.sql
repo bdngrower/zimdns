@@ -229,6 +229,25 @@ CREATE TABLE suggested_domains (
     UNIQUE(domain, service_id)
 );
 
+-- 19. BLOCKLIST_SOURCES
+CREATE TABLE blocklist_sources (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    enabled BOOLEAN DEFAULT true,
+    last_sync TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 20. BLOCKLIST_DOMAINS
+CREATE TABLE blocklist_domains (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    domain TEXT NOT NULL UNIQUE,
+    source_id UUID REFERENCES blocklist_sources(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- UPDATE TIMESTAMPS TRIGGERS
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -248,6 +267,7 @@ CREATE TRIGGER tr_manual_rules_updated_at BEFORE UPDATE ON manual_rules FOR EACH
 CREATE TRIGGER tr_block_pages_updated_at BEFORE UPDATE ON block_pages FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 CREATE TRIGGER tr_global_settings_updated_at BEFORE UPDATE ON global_settings FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 CREATE TRIGGER tr_dns_stats_daily_updated_at BEFORE UPDATE ON dns_stats_daily FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+CREATE TRIGGER tr_blocklist_sources_updated_at BEFORE UPDATE ON blocklist_sources FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 -- RLS POLICIES (Básica)
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
