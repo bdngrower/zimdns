@@ -48,6 +48,8 @@ export function NetworkOrigins({ clientId }: NetworkOriginsProps) {
             setNewValue('');
             setNewDesc('');
             loadOrigins();
+        } else {
+            alert(`Falha de segurança/banco de dados ao salvar rede: ${error.message}`);
         }
         setIsSaving(false);
     }
@@ -56,6 +58,8 @@ export function NetworkOrigins({ clientId }: NetworkOriginsProps) {
         const { error } = await supabase.from('client_networks').delete().eq('id', id);
         if (!error) {
             setOrigins(prev => prev.filter(o => o.id !== id));
+        } else {
+            alert(`Falha de segurança/banco de dados ao excluir rede: ${error.message}`);
         }
     }
 
