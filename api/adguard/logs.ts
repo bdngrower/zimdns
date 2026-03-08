@@ -138,10 +138,19 @@ export default async function handler(req: any, res: any) {
 
         console.log(` Matches encontrados: ${filteredLogs.length} / ${allLogs.length}`);
 
+        // Padronizar a resposta para garantir que o front-end sempre encontre o Domínio
+        const formattedLogs = filteredLogs.map((log: any) => {
+            return {
+                ...log,
+                queriedDomain: log.question?.host || log.question?.name || log.question?.qname || log.host || 'Desconhecido',
+                queryType: log.question?.type || '-'
+            };
+        });
+
         return res.status(200).json({
             success: true,
             _debug,
-            logs: filteredLogs.slice(0, 150) // limite razoavel p/ o front
+            logs: formattedLogs.slice(0, 150) // limite razoavel p/ o front
         });
 
     } catch (error: any) {

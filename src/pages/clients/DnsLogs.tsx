@@ -11,20 +11,27 @@ export function DnsLogs({ clientId }: DnsLogsProps) {
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchQuery] = useState('');
 
+    const [isPolling, setIsPolling] = useState(false);
+
     useEffect(() => {
-        async function fetchLogs() {
-            setIsLoading(true);
+        let mounted = true;
+
+        async function fetchLogs(showLoader = true) {
+            if (!mounted) return;
+
+            if (showLoader) {
+                setIsLoading(true);
+            } else {
+                setIsPolling(true);
+            }
+
             setError(null);
+
             try {
                 const res = await fetch(`/api/adguard/logs?clientId=${clientId}`, { cache: 'no-store' });
                 const data = await res.json();
 
-                console.log("🟠 ZIM DNS Frontend - Raw Logs Response:", data);
-                if (data._debug) {
-                    console.log("🟢 ZIM DNS Frontend - Logs _debug payload:", data._debug);
-                } else {
-                    console.log("🔴 ZIM DNS Frontend - Logs _debug payload MISSING in response.");
-                }
+                if (!mounted) return;
 
                 if (data.success) {
                     setLogs(data.logs || []);
@@ -32,26 +39,58 @@ export function DnsLogs({ clientId }: DnsLogsProps) {
                     setError(data.message || 'Erro ao carregar logs');
                 }
             } catch (err: any) {
+                if (!mounted) return;
                 setError(err.message || 'Erro de comunicação');
             } finally {
-                setIsLoading(false);
+                if (mounted) {
+                    setIsLoading(false);
+                    setIsPolling(false);
+                }
             }
         }
-        fetchLogs();
+
+        // Primeira carga
+        fetchLogs(true);
+
+        // Auto-refresh a cada 10 segundos
+        const intervalId = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                fetchLogs(false);
+            }
+        }, 10000);
+
+        return () => {
+            mounted = false;
+            clearInterval(intervalId);
+        };
     }, [clientId]);
 
     const filteredLogs = logs.filter(log =>
         !searchTerm ||
-        (log.question && log.question.host.toLowerCase().includes(searchTerm.toLowerCase()))
+        (log.queriedDomain && log.queriedDomain.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
     return (
         <div>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
                 <div>
-                    <h3 className="text-lg font-medium text-slate-900">Consultas DNS em Tempo Real</h3>
-                    <p className="text-sm text-slate-500">
-                        Últimas requisições mapeadas que vieram da origem de rede atrelada a este cliente.
+                    <div className="flex items-center gap-3">
+                        <h3 className="text-lg font-medium text-slate-900">Consultas DNS</h3>
+                        {/* Indicador sutil de polling/tempo-real */}
+                        <div className="flex items-center gap-1.5 bg-green-50 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-green-200">
+                            {isPolling ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                                <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                                </span>
+                            )}
+                            Tempo Real
+                        </div>
+                    </div>
+                    <p className="text-sm text-slate-500 mt-1">
+                        Últimas requisições locais (Auto-refresh a cada 10s).
                     </p>
                 </div>
                 <div className="relative w-full sm:w-64">
@@ -118,10 +157,10 @@ export function DnsLogs({ clientId }: DnsLogsProps) {
                                             {log.elapsedMs ? `${log.elapsedMs}ms` : '-'}
                                         </td>
                                         <td className="px-4 py-3 text-slate-500 font-mono text-xs">
-                                            {log.question?.type || '-'}
+                                            {log.queryType || '-'}
                                         </td>
-                                        <td className="px-4 py-3 font-medium text-slate-900">
-                                            {log.question?.host}
+                                        <td className="px-4 py-3 font-medium text-slate-900 truncate max-w-[200px] overflow-hidden" title={log.queriedDomain}>
+                                            {log.queriedDomain}
                                         </td>
                                         <td className="px-4 py-3">
                                             {isBlocked ? (
