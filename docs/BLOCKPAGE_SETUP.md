@@ -1,69 +1,83 @@
 # Configuração da Página de Bloqueio (Blockpage) End-to-End
 
-Quando um usuário acessa um domínio bloqueado pelo ZIM DNS (AdGuard Home), o comportamento padrão do motor é retornar o IP `0.0.0.0` (NXDOMAIN), o que resulta no erro **"This site can't be reached"** no navegador.
+Quando um usuário acessa um domínio bloqueado pelo ZIM DNS (AdGuard Home), o comportamento padrão do motor é retornar o IP `0.0.0.0` (NXDOMAIN), o que resulta no erro abstrato **"This site can't be reached"** no navegador.
 
-Para redirecionar o usuário para a bela página `/blocked` do ZIM DNS, precisamos configurar o AdGuard para usar o modo **Custom IP**.
+Para redirecionar o usuário para a página visual `/blocked` do ZIM DNS, precisamos configurar o AdGuard para usar o modo **Custom IP**.
 
-## O Problema Arquitetural (Serverless)
-O ZIM DNS é hospedado na Vercel (ou outro provedor serverless). A Vercel depende do cabeçalho de Host HTTP (`Host: zimdns.vercel.app`) para rotear o tráfego. 
-Se você colocar o IP direto da Vercel no AdGuard, o navegador do usuário vai tentar acessar `[IP DA VERCEL]` pedindo pelo host `youtube.com`. A Vercel não vai encontrar o YouTube nos seus servidores e retornará um erro 404/SSL da própria plataforma, quebrando a navegação antes de exibir a sua página `/blocked`.
+## O Ponto Cego do DNS (Portas 80 / 443)
+O protocolo DNS serve apenas para traduzir um Nome (Ex: facebook.com) para um IP (Ex: 54.12.33.4). **O DNS NÃO retorna portas**.
+Se o usuário digitou `http://facebook.com` no navegador, o navegador vai bater na **porta 80** do IP que o DNS retornou.
+Portanto, é impossível usar algo como `http://MEU_IP:8081` diretamente no Custom IP do bloqueio DNS.
 
-## A Solução: Servidor Proxy "Catch-All" (Nginx)
+## O Problema Arquitetural (Serverless e SNI)
+O ZIM DNS é hospedado na Vercel (ou outro provedor serverless). A Vercel usa o cabeçalho de Host HTTP (`Host: zimdns.vercel.app`) para rotear para as funções corretas.
+Se você colocar o *IP direto da Vercel* no AdGuard, o navegador do usuário acessará a Vercel com o cabeçalho `Host: facebook.com`. A Vercel vai retornar um erro 404 (Domain Not Found), pois ela não reconhece esse domínio.
 
-Para fechar o fluxo de ponta a ponta, você precisa de um pequeno servidor **Nginx** (pode ser instalado na mesma máquina AWS onde roda o seu AdGuard Master). Este servidor vai interceptar todas as chamadas HTTP bloqueadas e fazer um redirecionamento limpo (HTTP 302) para a sua URL da Vercel, passando o domínio original no link.
+## A Solução Definitiva: Servidor Proxy "Catch-All" (Nginx)
 
-### Passo 1: Instale o Nginx na sua máquina AWS (AdGuard)
+Precisamos de um servidor Nginx, rodando em um IP público fixo e escutando **obrigatoriamente na porta 80**, para capturar esse tráfego e fazer um redirecionamento HTTP 302 explícito para a aplicação Vercel.
+
+**💡 Boa Prática:** Instale este Nginx na própria máquina EC2 onde o AdGuard Home já opera.
+
+### Passo 1: Libere a Porta 80 do AdGuard
+Por padrão, o painel do AdGuard Home é instalado na porta 80. Precisamos liberar essa porta para o Nginx.
+1. Edite o `AdGuardHome.yaml`.
+2. Altere `bind_port: 80` para `bind_port: 3000` (ou 8080).
+3. Reinicie o AdGuard.
+
+### Passo 2: Instale o Nginx
 
 ```bash
 sudo apt update
 sudo apt install nginx -y
 ```
 
-### Passo 2: Configure o Bloco "Catch-All"
+### Passo 3: Configure o Bloco "Catch-All" na porta 80
 
-Crie ou edite o arquivo padrão do Nginx:
+Edite o arquivo de configuração e delete tudo:
 ```bash
 sudo nano /etc/nginx/sites-available/default
 ```
 
-Substitua todo o conteúdo por este bloco (Lembre-se de trocar `SEU_APP.vercel.app` pela sua URL de produção):
+Insira este conteúdo substituindo a URL da Vercel pela sua URL em produção:
 
 ```nginx
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
 
-    # Captura o dominio acessado pela variável $host
+    # O "_" aceita qualquer host
     server_name _;
 
     # Redireciona tudo para o painel ZIM DNS passando o host como query string
-    return 302 https://SEU_APP.vercel.app/blocked?domain=$host;
+    return 302 https://SEU_ZIM_APP.vercel.app/blocked?domain=$host;
 }
 ```
 
-*Nota sobre HTTPS: Interceptar HTTPS (porta 443) de domínios aleatórios geraria alerta de certificado inválido no navegador do usuário de qualquer forma (HSTS). O redirecionamento na porta 80 é o padrão prático para blockpages.*
+*Nota sobre HTTPS (Porta 443): Bloqueios de sites modernos via HTTPS gerarão alerta de certificado SSL inválido (Sec_Error_Unknown_Issuer) independente da ferramenta, pois trata-se de um design de segurança do HSTS que não pode ser burlado de fora. A Blockpage em nível DNS captura e funciona de forma transparente primariamente sobre conexões HTTP plano ou onde o HSTS/HTTPS estrito não está em cache.*
 
-### Passo 3: Reinicie o Nginx
+### Passo 4: Reinicie o Nginx
 
 ```bash
 sudo nginx -t
 sudo systemctl restart nginx
 ```
 
-### Passo 4: Ative no ZIM DNS
+### Passo 5: Ative no ZIM DNS
 
-Agora que seu Nginx está rodando e redirecionando as URLs, acesse o painel **Configurações do Sistema** no ZIM DNS.
-1. Localize a seção **Página de Bloqueio Personalizada**.
-2. Insira o endereço de IP público desta sua máquina AWS/Nginx.
-3. Clique em Aplicar.
+Acesse a UI web do ZIM DNS > **Configurações do Sistema**.
+1. Localize a seção **Página de Bloqueio (UX)**.
+2. Insira o IP público do seu servidor (Aquele que roda o novo Nginx, provavelmente a EC2 do AdGuard).
+3. Clique em Aplicar IP.
 
-O ZIM DNS mandará a instrução via API para o AdGuard:
-- `blocking_mode = custom_ip`
-- `blocking_ipv4 = SEU_IP_NGINX`
+O ZIM DNS registrará via API no AdGuard globalmente as chaves principais:
+- `blocking_mode: custom_ip`
+- `blocking_ipv4: [SEU_IP_DA_EC2]`
 
-### Fluxo Final
-1. Usuário tenta acessar `facebook.com`
-2. AdGuard bloqueia e responde: `IP = SUAMAQUINA_AWS`
-3. Navegador chama `http://SUAMAQUINA_AWS` (com host facebook.com)
-4. Nginx intercepta e responde: `302 Redirect -> https://zimdns.vercel.app/blocked?domain=facebook.com`
-5. Navegador exibe o escudo vermelho premium do ZIM DNS!
+### Fluxo Ponta a Ponta Finalizado
+1. Cliente tenta acessar `http://jogosonline.com`.
+2. AdGuard bloqueia e responde o seu IP Customizado via DNS (`SEU_IP_DA_EC2`).
+3. O Navegador bate na porta 80 do `SEU_IP_DA_EC2` pedindo `Host: jogosonline.com`.
+4. Nginx intercepta (devido ao `default_server` e `_`) e envia um 302 Redirect.
+5. ZIM DNS na Vercel recebe o redirecionamento com o argumento web em `https://zimdns.vercel.app/blocked?domain=jogosonline.com`.
+6. O Shield Visual UI da sua marca aparece para o cliente na tela inteira.

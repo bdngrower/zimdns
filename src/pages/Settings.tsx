@@ -348,8 +348,8 @@ export function Settings() {
                             IP do Nginx (Blockpage Proxy)
                         </label>
                         <p className="text-sm text-slate-500 mb-3">
-                            Digite o IP externo da máquina/nginx que interceptará as respostas do bloqueio e fará um HTTP 302 direto pro seu ambiente Vercel.
-                            Deixe vazio para o AdGuard usar NXDOMAIN padrão (página quebrada).
+                            Digite o IP externo da máquina que executará o redirecionamento. Pela limitação do protocolo DNS, <strong>este IP deverá obrigatoriamente escutar nas portas 80 (HTTP) e 443 (HTTPS)</strong>.
+                            Deixe vazio para o AdGuard usar NXDOMAIN padrão (página NXDOMAIN que falha em carregar).
                         </p>
                         <div className="flex gap-3">
                             <input
