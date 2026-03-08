@@ -41,7 +41,13 @@ export default async function handler(req: any, res: any) {
             }
 
             if (data && data.length > 0) {
-                allDomains.push(...data.map((row: any) => row.domain));
+                // Safely iterate to push elements individually to bypass V8 max call stack
+                for (let row of data) {
+                    if (row.domain) {
+                        allDomains.push(row.domain);
+                    }
+                }
+
                 page++;
 
                 // Se retornou menos que o PAGE_SIZE, bateu no final
@@ -75,7 +81,11 @@ export default async function handler(req: any, res: any) {
         // Removed AdGuard specific tag to keep it clean format
         payload += `!\n`;
 
-        const domainsString = allDomains.map((domain: string) => `||${domain}^`).join('\n');
+        const domainsString = allDomains.map((domain: string) => {
+            // Guarantee no prefix wildcard is somehow sneaking via raw strings
+            const cleanDomain = domain.replace(/^\*\./, '');
+            return `||${cleanDomain}^`;
+        }).join('\n');
 
         return res.status(200).send(payload + domainsString);
 
