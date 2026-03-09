@@ -81,8 +81,8 @@ function App() {
     // Initializa o fluxo de verificação segura na montagem do app
     bootstrapAuth();
 
-    // Ouvis os eventos que acontecem PÓS bootstrap (ex: expiração de token durante uso, logout em outra aba)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // Ouve os eventos que acontecem PÓS bootstrap (ex: expiração de token durante uso, logout em outra aba)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log(`[Auth Event Detected] ${event}`, session?.user?.email || 'No Session');
 
       if (event === 'SIGNED_OUT') {
@@ -92,13 +92,21 @@ function App() {
           useAuthStore.setState({ user: session.user });
 
           // Profiling refetch for safety on implicit refresh
-          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-          if (mounted) {
-            useAuthStore.setState({ profile: profile || null, isLoading: false });
-          }
+          // IMPORTANTE: Não usar "await" na thread principal do listener para não travar o loop de eventos do Supabase.
+          const fetchProfileAsync = async () => {
+            try {
+              const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+              if (mounted) {
+                useAuthStore.setState({ profile: profile || null, isLoading: false });
+              }
+            } catch (err) {
+              console.error('[Auth Event] Profile fetch failed:', err);
+            }
+          };
+          fetchProfileAsync();
         }
       } else if (event === 'INITIAL_SESSION') {
-        // Omitido de propósito, lidamos com isso no bootstrapAuth focado.
+        // Omitido de propósito, lidamos com isso no bootstrapAuth.
         console.log('[Auth Event Detected] INITIAL_SESSION ignored in favor of explicit getUser() bootstrap.');
       }
     });

@@ -1,7 +1,7 @@
 import { useAuthStore } from '../../store/useAuthStore';
-import { LogOut, Bell, ChevronDown, Shield } from 'lucide-react';
+import { LogOut, Bell, ChevronDown, Shield, Menu } from 'lucide-react';
 
-export function Header() {
+export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     const { user, profile, signOut } = useAuthStore();
 
     const initials = (profile?.full_name ?? user?.email ?? 'U')
@@ -20,6 +20,17 @@ export function Header() {
             style={{ boxShadow: '0 1px 0 0 rgba(15, 23, 42, 0.04)' }}>
             {/* Left: Context / Breadcrumb */}
             <div className="flex items-center gap-3 min-w-0">
+                {/* Mobile Menu Toggle */}
+                {onMenuClick && (
+                    <button
+                        onClick={onMenuClick}
+                        className="lg:hidden p-1.5 -ml-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                        aria-label="Abrir menu"
+                    >
+                        <Menu className="h-[20px] w-[20px]" />
+                    </button>
+                )}
+
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50/80 cursor-default select-none">
                     <div className="h-2 w-2 rounded-full flex-shrink-0 bg-emerald-400" />
                     <span className="text-sm font-semibold text-slate-700 truncate">Visão Geral</span>

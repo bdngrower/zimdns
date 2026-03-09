@@ -62,14 +62,15 @@ function NavSection({ items, label }: { items: typeof navMain; label?: string })
         </div>
     );
 }
+import { X } from 'lucide-react';
 
-export function Sidebar() {
+export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
     const { profile } = useAuthStore();
 
     return (
         <div className="flex h-full w-[220px] flex-col flex-shrink-0" style={{ backgroundColor: 'var(--color-sidebar-bg)', borderRight: '1px solid var(--color-sidebar-border)' }}>
             {/* Logo */}
-            <div className="flex h-16 shrink-0 items-center px-5" style={{ borderBottom: '1px solid var(--color-sidebar-border)' }}>
+            <div className="flex h-16 shrink-0 items-center justify-between px-5" style={{ borderBottom: '1px solid var(--color-sidebar-border)' }}>
                 <div className="flex items-center gap-2.5">
                     <div className="flex items-center justify-center h-8 w-8 rounded-lg" style={{ background: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.4)' }}>
                         <Shield className="h-4 w-4 text-white" />
@@ -79,6 +80,17 @@ export function Sidebar() {
                         <span className="text-[10px] font-medium text-slate-500 tracking-wide uppercase leading-none block mt-0.5">Security Platform</span>
                     </div>
                 </div>
+
+                {/* Mobile Close Toggle */}
+                {onCloseMobile && (
+                    <button
+                        onClick={onCloseMobile}
+                        className="lg:hidden p-1.5 -mr-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                        aria-label="Fechar menu"
+                    >
+                        <X className="h-5 w-5" />
+                    </button>
+                )}
             </div>
 
             {/* Navigation */}

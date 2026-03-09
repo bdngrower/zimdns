@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
@@ -41,24 +41,40 @@ export function Login() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const navigate = useNavigate();
-    const { setUser } = useAuthStore();
+    const { user, setUser } = useAuthStore();
+
+    // Redirecionamento reativo: se o estado global for populado magicamente (ex: onAuthStateChange)
+    // Isso tira a tela da trava 'Autenticando...' num instante.
+    useEffect(() => {
+        if (user) {
+            navigate('/dashboard', { replace: true });
+        }
+    }, [user, navigate]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        console.log('[Login] handleLogin started', { email });
         setIsLoading(true);
         setError('');
 
         try {
+            console.log('[Login] Calling signInWithPassword...');
             const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            console.log('[Login] signInWithPassword returned', { data, error });
             if (error) throw error;
             if (data.user) {
+                console.log('[Login] Setting user in store...');
                 setUser(data.user);
-                navigate('/dashboard');
+                console.log('[Login] Navigating to /dashboard...');
+                navigate('/dashboard', { replace: true });
+                console.log('[Login] Navigation called.');
             }
         } catch (err: any) {
+            console.error('[Login] Login error:', err);
             setError(err.message || 'Credenciais inválidas. Verifique e tente novamente.');
         } finally {
             setIsLoading(false);
+            console.log('[Login] handleLogin finally block executed.');
         }
     };
 
