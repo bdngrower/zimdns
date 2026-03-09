@@ -6,16 +6,26 @@ import { cn } from '../../lib/utils';
 interface CatalogItem {
     id: string;
     name: string;
-    description: string;
-    icon: string;
-    status: string;
+    description?: string;
+    icon?: string;
+    status?: string;
+}
+
+interface BlocklistEntry {
+    id: string;
+    name: string;
+    url: string;
+    enabled: boolean;
+    last_sync: string | null;
+    domain_count: number;
 }
 
 export function ServiceCatalog() {
     const [services, setServices] = useState<CatalogItem[]>([]);
     const [categories, setCategories] = useState<CatalogItem[]>([]);
+    const [blocklists, setBlocklists] = useState<BlocklistEntry[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'categories' | 'services'>('categories');
+    const [activeTab, setActiveTab] = useState<'categories' | 'services' | 'blocklists'>('categories');
     const [searchTerm, setSearchTerm] = useState('');
 
     // Slideover states
@@ -25,13 +35,15 @@ export function ServiceCatalog() {
     useEffect(() => {
         async function loadCatalog() {
             setIsLoading(true);
-            const [servicesRes, categoriesRes] = await Promise.all([
+            const [servicesRes, categoriesRes, blocklistsRes] = await Promise.all([
                 supabase.from('service_catalog').select('*, service_domains(domain)').order('name'),
                 supabase.from('block_categories').select('*').order('name'),
+                supabase.from('catalog_lists').select('*').order('domain_count', { ascending: false }),
             ]);
 
             if (!servicesRes.error) setServices(servicesRes.data);
             if (!categoriesRes.error) setCategories(categoriesRes.data);
+            if (!blocklistsRes.error) setBlocklists(blocklistsRes.data ?? []);
 
             setIsLoading(false);
         }
@@ -102,6 +114,16 @@ export function ServiceCatalog() {
                             <LayoutGrid className="h-4 w-4" />
                             Serviços
                         </button>
+                        <button
+                            onClick={() => setActiveTab('blocklists')}
+                            className={cn(
+                                "flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-md transition-all",
+                                activeTab === 'blocklists' ? "bg-white text-slate-900 shadow-sm border-slate-200" : "text-slate-500 hover:text-slate-700"
+                            )}
+                        >
+                            <ShieldAlert className="h-4 w-4" />
+                            Blocklists
+                        </button>
                     </div>
 
                     <div className="relative flex-1 sm:max-w-xs">
@@ -123,6 +145,49 @@ export function ServiceCatalog() {
                         <div className="flex flex-col items-center justify-center h-64">
                             <div className="h-8 w-8 border-2 border-blue-600 border-t-transparent animate-spin rounded-full mb-4" />
                             <p className="text-sm font-medium text-slate-500">Carregando catálogo...</p>
+                        </div>
+                    ) : activeTab === 'blocklists' ? (
+                        // ---- ABA BLOCKLISTS (lê da view catalog_lists) ----
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                            {blocklists.length === 0 ? (
+                                <div className="col-span-3 flex flex-col items-center justify-center h-64 text-center">
+                                    <div className="h-16 w-16 bg-slate-100 rounded-3xl flex items-center justify-center mb-4">
+                                        <ShieldAlert className="h-8 w-8 text-slate-300" />
+                                    </div>
+                                    <h3 className="text-base font-semibold text-slate-900">Nenhuma blocklist sincronizada</h3>
+                                    <p className="text-sm text-slate-500 mt-1 max-w-sm">Execute o cron de sincronização para popular as fontes.</p>
+                                </div>
+                            ) : blocklists.map(bl => (
+                                <div key={bl.id} className="flex flex-col p-6 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all">
+                                    <div className="flex items-start justify-between mb-4">
+                                        <div className="h-12 w-12 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center flex-shrink-0">
+                                            <ShieldAlert className="h-6 w-6 text-red-500" />
+                                        </div>
+                                        <span className={cn(
+                                            "text-xs font-semibold px-2 py-1 rounded-full",
+                                            bl.enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
+                                        )}>
+                                            {bl.enabled ? 'Ativa' : 'Inativa'}
+                                        </span>
+                                    </div>
+                                    <h4 className="font-bold text-slate-900 text-base mb-1">{bl.name}</h4>
+                                    <a href={bl.url} target="_blank" rel="noopener noreferrer" className="text-xs text-slate-400 hover:text-blue-600 truncate mb-4 transition-colors flex items-center gap-1">
+                                        <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                                        {bl.url}
+                                    </a>
+                                    <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between">
+                                        <span className="text-2xl font-bold text-slate-900">
+                                            {new Intl.NumberFormat('pt-BR', { notation: 'compact', compactDisplay: 'short' }).format(bl.domain_count)}
+                                        </span>
+                                        <span className="text-xs text-slate-500">domínios bloqueados</span>
+                                    </div>
+                                    {bl.last_sync && (
+                                        <p className="text-[10px] text-slate-400 mt-2">
+                                            Última sync: {new Date(bl.last_sync).toLocaleString('pt-BR')}
+                                        </p>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     ) : filteredItems.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-64 text-center">

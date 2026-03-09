@@ -9,7 +9,7 @@ export default async function handler(req: any, res: any) {
     const { source } = req.query;
 
     const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
-    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || ''; // Read-only is fine here
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 
     if (!supabaseUrl || !supabaseKey) {
         return res.status(500).send('! Missing DB Settings');
@@ -18,79 +18,101 @@ export default async function handler(req: any, res: any) {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     try {
-        let allDomains: string[] = [];
-        let hasMore = true;
-        let page = 0;
-        const PAGE_SIZE = 10000; // Supabase/PostgREST max rows configurado (padrão é 1000, mas vamos puxar o máximo que ele nos entregar iterativamente)
+        // ===========================================================
+        // PASSO 1: Buscar total REAL do banco antes de paginar
+        // Evita usar allDomains.length (que depende do lote carregado)
+        // ===========================================================
+        let countQuery = supabase
+            .from('blocklist_domains')
+            .select('*', { count: 'exact', head: true });
 
-        while (hasMore) {
-            let query = supabase.from('blocklist_domains').select('domain, blocklist_sources!inner(name, enabled)');
+        if (source) {
+            countQuery = countQuery.eq('blocklist_sources.name', source);
+        } else {
+            // Filtra apenas fontes habilitadas via join
+            countQuery = (countQuery as any).eq('blocklist_sources.enabled', true);
+        }
 
-            // Se a chamada pedir um target isolado, puxa só ele. Se não, puxa o consolidado ativo todo.
+        const { count: totalCount, error: countError } = await supabase
+            .from('blocklist_domains')
+            .select('*', { count: 'exact', head: true });
+
+        if (countError) {
+            console.error('Blocklist Export COUNT Error:', countError);
+        }
+
+        // ===========================================================
+        // PASSO 2: Buscar todos os domínios via paginação
+        // Loop simples (from-offset) como solicitado
+        // ===========================================================
+        const allDomains: string[] = [];
+        const BATCH_SIZE = 10000;
+        let from = 0;
+
+        while (true) {
+            let query = supabase
+                .from('blocklist_domains')
+                .select('domain, blocklist_sources!inner(name, enabled)')
+
             if (source) {
-                query = query.eq('blocklist_sources.name', source);
+                query = query.eq('blocklist_sources.name', source).range(from, from + BATCH_SIZE - 1);
             } else {
-                query = query.eq('blocklist_sources.enabled', true);
+                query = query.eq('blocklist_sources.enabled', true).range(from, from + BATCH_SIZE - 1);
             }
 
-            const { data, error } = await query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+            const { data, error } = await query;
 
             if (error) {
-                console.error(`Blocklist Export Pagination Error at page ${page}:`, error);
-                return res.status(500).send(`! Database error at chunk ${page}: ${error.message}`);
+                console.error(`Blocklist Export Pagination Error at from=${from}:`, error);
+                return res.status(500).send(`! Database error at offset ${from}: ${error.message}`);
             }
 
-            if (data && data.length > 0) {
-                // Safely iterate to push elements individually to bypass V8 max call stack
-                for (let row of data) {
-                    if (row.domain) {
-                        allDomains.push(row.domain);
-                    }
+            if (!data || data.length === 0) break;
+
+            for (const row of data) {
+                if (row.domain) {
+                    // Remove prefixo wildcard *.  caso venha sujo
+                    const clean = row.domain.replace(/^\*\./, '');
+                    allDomains.push(clean);
                 }
-
-                page++;
-
-                // Se retornou menos que o PAGE_SIZE, bateu no final
-                if (data.length < PAGE_SIZE) {
-                    hasMore = false;
-                }
-            } else {
-                hasMore = false;
             }
 
-            // Hard limit para não engagar o Serverless timeout da Vercel (10s max em plano Hobby usualmente ~100 loops são ok dependendo do db)
-            if (page > 150) {
-                hasMore = false;
-            }
+            from += BATCH_SIZE;
+
+            // Saída antecipada se retornou menos que o batch
+            if (data.length < BATCH_SIZE) break;
+
+            // Hard limit: 150 páginas x 10k = 1.5M domínios (cobre qualquer cenário)
+            if (from > 1_500_000) break;
         }
 
         if (allDomains.length === 0) {
             return res.status(200).send('! No malicious domains cataloged yet.');
         }
 
-        // Formata nativamente para o Motor de AdBlock (linha a linha, `||domain.com^`)
-        // Utilizando headers em TXT plaintext
+        // ===========================================================
+        // PASSO 3: Montar o payload no formato nativo do AdGuard
+        // Header usa o COUNT real do banco, não o tamanho do array
+        // ===========================================================
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Cache-Control', 's-maxage=14400, stale-while-revalidate'); // 4 hours cache no CDN da Vercel
+        res.setHeader('Cache-Control', 's-maxage=14400, stale-while-revalidate');
 
         const timestamp = new Date().toUTCString();
+        // Usa totalCount do banco se disponível, senão usa tamanho do array como fallback
+        const displayCount = totalCount ?? allDomains.length;
+
         let payload = `! Title: ZIM DNS Universal Threat Intelligence\n`;
         payload += `! Description: Consolidated Global Malware, Phishing & Ad Blocklist\n`;
         payload += `! Updated: ${timestamp}\n`;
-        payload += `! Count: ${allDomains.length}\n`;
-        // Removed AdGuard specific tag to keep it clean format
+        payload += `! Count: ${displayCount}\n`;
         payload += `!\n`;
 
-        const domainsString = allDomains.map((domain: string) => {
-            // Guarantee no prefix wildcard is somehow sneaking via raw strings
-            const cleanDomain = domain.replace(/^\*\./, '');
-            return `||${cleanDomain}^`;
-        }).join('\n');
+        const domainsString = allDomains.map(domain => `||${domain}^`).join('\n');
 
         return res.status(200).send(payload + domainsString);
 
     } catch (err: any) {
-        console.error("Blocklist Export Error:", err);
+        console.error('Blocklist Export Error:', err);
         return res.status(500).send(`! Internal Server Error: ${err.message}`);
     }
 }
