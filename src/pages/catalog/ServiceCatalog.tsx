@@ -9,6 +9,14 @@ interface CatalogItem {
     description?: string;
     icon?: string;
     status?: string;
+    // Da view catalog_services_full
+    category?: string;
+    category_name?: string;
+    category_id?: string;
+    domain_count?: number;
+    // Da view catalog_categories_summary
+    service_count?: number;
+    total_domains?: number;
 }
 
 interface BlocklistEntry {
@@ -36,13 +44,15 @@ export function ServiceCatalog() {
         async function loadCatalog() {
             setIsLoading(true);
             const [servicesRes, categoriesRes, blocklistsRes] = await Promise.all([
-                supabase.from('service_catalog').select('*, service_domains(domain)').order('name'),
-                supabase.from('block_categories').select('*').order('name'),
+                // View unificada com domain_count e category_name real
+                supabase.from('catalog_services_full').select('*').order('category_name').order('name'),
+                // Resumo das categorias com contagem de serviços e domínios
+                supabase.from('catalog_categories_summary').select('*').order('category_name'),
                 supabase.from('catalog_lists').select('*').order('domain_count', { ascending: false }),
             ]);
 
-            if (!servicesRes.error) setServices(servicesRes.data);
-            if (!categoriesRes.error) setCategories(categoriesRes.data);
+            if (!servicesRes.error) setServices(servicesRes.data ?? []);
+            if (!categoriesRes.error) setCategories(categoriesRes.data ?? []);
             if (!blocklistsRes.error) setBlocklists(blocklistsRes.data ?? []);
 
             setIsLoading(false);
@@ -223,9 +233,14 @@ export function ServiceCatalog() {
                                     <div className="flex-1">
                                         <div className="flex items-center justify-between">
                                             <h4 className="font-bold text-slate-900 group-hover:text-accent transition-colors text-lg">{item.name}</h4>
-                                            {activeTab === 'services' && (item as any).service_domains?.length > 0 && (
-                                                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-1 rounded-md font-medium border border-slate-200 shadow-sm" title={`${(item as any).service_domains.length} domínios`}>
-                                                    {new Intl.NumberFormat("pt-BR", { notation: "compact", compactDisplay: "short" }).format((item as any).service_domains.length)} domínios
+                                            {activeTab === 'services' && (item.domain_count ?? 0) > 0 && (
+                                                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-1 rounded-md font-medium border border-slate-200 shadow-sm" title={`${item.domain_count} domínios`}>
+                                                    {new Intl.NumberFormat("pt-BR", { notation: "compact", compactDisplay: "short" }).format(item.domain_count ?? 0)} domínios
+                                                </span>
+                                            )}
+                                            {activeTab === 'categories' && (item.service_count ?? 0) > 0 && (
+                                                <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded-md font-medium border border-blue-100 shadow-sm">
+                                                    {item.service_count} serviços
                                                 </span>
                                             )}
                                         </div>
@@ -237,9 +252,16 @@ export function ServiceCatalog() {
                                         <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
                                             <CheckCircle2 className="h-3.5 w-3.5" /> Oficial
                                         </span>
-                                        <span className="text-xs font-medium text-slate-400 group-hover:text-accent transition-colors">
-                                            Explorar Política
-                                        </span>
+                                        {activeTab === 'categories' && (item.total_domains ?? 0) > 0 && (
+                                            <span className="text-xs text-slate-400">
+                                                {new Intl.NumberFormat('pt-BR', { notation: 'compact', compactDisplay: 'short' }).format(item.total_domains ?? 0)} domínios
+                                            </span>
+                                        )}
+                                        {activeTab === 'services' && (
+                                            <span className="text-xs font-medium text-slate-400 group-hover:text-accent transition-colors">
+                                                Explorar Política
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                             ))}

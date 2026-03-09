@@ -35,14 +35,17 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
             setIsLoading(true);
 
             const [servsRes, togglesRes] = await Promise.all([
-                supabase.from('service_catalog').select('*, service_domains(domain)').order('name'),
+                // Usando a view unificada que inclui category_name real do banco
+                supabase.from('catalog_services_full').select('*').order('category_name').order('name'),
                 supabase.from('client_policies').select('*').eq('client_id', clientId).eq('enabled', true)
             ]);
 
             if (servsRes.data) {
-                setServices(servsRes.data);
-                const uniqueCats = Array.from(new Set(servsRes.data.map(s => s.category)));
-                setCategories(uniqueCats as string[]);
+                // Carregar também domínios por serviço (para exibir contagem)
+                setServices(servsRes.data.map((s: any) => ({ ...s, service_domains: [] })));
+                // Agrupar por category_name (FK real) com fallback pro campo texto
+                const uniqueCats = Array.from(new Set(servsRes.data.map((s: any) => s.category_name || s.category)));
+                setCategories(uniqueCats.filter(Boolean) as string[]);
 
                 // Expandir as 4 primeiras
                 const initialExpanded: Record<string, boolean> = {};
@@ -57,6 +60,7 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                 });
                 setActiveToggles(toggleMap);
             }
+
 
             setIsLoading(false);
         }
@@ -189,7 +193,7 @@ export function BlockSwitches({ clientId }: BlockSwitchesProps) {
                     const groupIsActive = activeToggles[category] || false;
                     const isExpanded = expandedGroups[category] || false;
 
-                    const childServices = services.filter(s => s.category === category);
+                    const childServices = services.filter(s => (s.category_name || s.category) === category);
                     const filteredChildren = childServices.filter(child =>
                         !q || child.name.toLowerCase().includes(q) || (child.description && child.description.toLowerCase().includes(q))
                     );
