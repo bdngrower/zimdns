@@ -22,49 +22,33 @@ function App() {
   const { setUser, setProfile, isLoading } = useAuthStore();
 
   useEffect(() => {
-    async function initAuth() {
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-
-        const user = session?.user ?? null;
-        setUser(user);
-
-        if (user) {
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .maybeSingle();
-
-          if (!profileError && profile) {
-            setProfile(profile);
-          }
-        }
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-        setUser(null);
-        setProfile(null);
-      } finally {
-        useAuthStore.setState({ isLoading: false });
-      }
-    }
-
-    initAuth();
-
+    // Usar APENAS onAuthStateChange como fonte de verdade.
+    // O Supabase sempre dispara esse evento na inicialização (INITIAL_SESSION),
+    // inclusive quando não há sessão (session = null). Isso elimina a race condition
+    // entre initAuth() e o listener que causava o loading infinito.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       try {
         const user = session?.user ?? null;
         setUser(user);
 
         if (user) {
-          const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .maybeSingle();
           if (profile) setProfile(profile);
+          else setProfile(null);
         } else {
           setProfile(null);
         }
       } catch (err) {
         console.error('Error on auth state change:', err);
+        setUser(null);
+        setProfile(null);
+      } finally {
+        // Garante que o loading sempre termina após o primeiro evento
+        useAuthStore.setState({ isLoading: false });
       }
     });
 
