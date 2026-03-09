@@ -4,11 +4,11 @@ import { Header } from './Header';
 
 export function AppShell() {
     return (
-        <div className="flex h-screen overflow-hidden bg-background">
+        <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--color-background)' }}>
             <Sidebar />
-            <div className="flex flex-1 flex-col overflow-hidden">
+            <div className="flex flex-1 flex-col overflow-hidden min-w-0">
                 <Header />
-                <main className="flex-1 overflow-y-auto w-full max-w-7xl mx-auto">
+                <main className="flex-1 overflow-y-auto">
                     <Outlet />
                 </main>
             </div>

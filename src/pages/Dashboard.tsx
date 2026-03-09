@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Activity, ShieldAlert, Globe, Users, Server, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Activity, Globe, Server, ShieldAlert, Users } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export function Dashboard() {
@@ -118,227 +118,217 @@ export function Dashboard() {
         loadData();
     }, []);
 
-    const IntlNumber = new Intl.NumberFormat('pt-BR', { notation: "compact", compactDisplay: "short" });
+    const fmt = new Intl.NumberFormat('pt-BR', { notation: 'compact', compactDisplay: 'short' });
+    const blockRate = stats.totalQueries24h > 0
+        ? ((stats.totalBlocked24h / stats.totalQueries24h) * 100).toFixed(1)
+        : '0.0';
 
-    const cards = [
-        { name: 'Redes Privadas/Clientes', value: stats.clients, icon: Users, iconColor: 'text-indigo-600', bg: 'bg-indigo-50/80', border: 'border-indigo-100' },
-        { name: 'Ameaças (Blocklist)', value: stats.threatsCataloged > 0 ? IntlNumber.format(stats.threatsCataloged) : '0', icon: ShieldAlert, iconColor: 'text-rose-600', bg: 'bg-rose-50/80', border: 'border-rose-100' },
-        { name: 'Consultas DNS (24h)', value: stats.totalQueries24h > 0 ? IntlNumber.format(stats.totalQueries24h) : '0', icon: Activity, iconColor: 'text-emerald-600', bg: 'bg-emerald-50/80', border: 'border-emerald-100' },
-        { name: 'Bloqueios Atuados (24h)', value: stats.totalBlocked24h > 0 ? IntlNumber.format(stats.totalBlocked24h) : '0', icon: Globe, iconColor: 'text-amber-600', bg: 'bg-amber-50/80', border: 'border-amber-100' },
+    const metricCards = [
+        {
+            label: 'Clientes Protegidos',
+            value: isLoading ? null : String(stats.clients),
+            icon: Users,
+            iconClass: 'text-blue-500',
+            iconBg: 'bg-blue-50',
+            accent: '#3b82f6',
+            sub: 'Redes ativas',
+        },
+        {
+            label: 'Consultas DNS',
+            value: isLoading ? null : fmt.format(stats.totalQueries24h),
+            icon: Activity,
+            iconClass: 'text-emerald-500',
+            iconBg: 'bg-emerald-50',
+            accent: '#10b981',
+            sub: 'Últimas 24h',
+        },
+        {
+            label: 'Ameaças Bloqueadas',
+            value: isLoading ? null : fmt.format(stats.totalBlocked24h),
+            icon: ShieldAlert,
+            iconClass: 'text-rose-500',
+            iconBg: 'bg-rose-50',
+            accent: '#ef4444',
+            sub: 'Últimas 24h',
+        },
+        {
+            label: 'Taxa de Bloqueio',
+            value: isLoading ? null : `${blockRate}%`,
+            icon: Globe,
+            iconClass: 'text-violet-500',
+            iconBg: 'bg-violet-50',
+            accent: '#8b5cf6',
+            sub: 'Do total de consultas',
+        },
     ];
 
+    const today = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+    const todayCap = today.charAt(0).toUpperCase() + today.slice(1);
+
     return (
-        <div className="p-8 max-w-6xl mx-auto">
-            <div className="mb-8">
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Monitoramento Executivo</h1>
-                <p className="mt-1 text-sm text-slate-500">
-                    Visão global de ameaças corporativas, clientes protegidos e telemetria do motor de resolução DNS.
-                </p>
-            </div>
-
-            {/* ADGUARD INTEGRATION STATUS CARD */}
-            <div className="mb-8 bg-white border border-border shadow-sm rounded-xl overflow-hidden p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-lg border ${adguardState.status === 'success'
-                        ? 'bg-green-50 text-green-600 border-green-100'
-                        : adguardState.status === 'error' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-slate-50 text-slate-400'
+        <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in transition-all">
+            {/* Page Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 className="page-title">Monitoramento Executivo</h1>
+                    <p className="page-subtitle">Telemetria DNS em tempo real &middot; {todayCap}</p>
+                </div>
+                {/* AdGuard Status Badge */}
+                <div className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold border ${adguardState.status === 'success'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : adguardState.status === 'error'
+                        ? 'bg-red-50 text-red-700 border-red-200'
+                        : 'bg-slate-50 text-slate-500 border-slate-200'
+                    }`}>
+                    <div className={`relative flex-shrink-0 h-2 w-2 rounded-full ${adguardState.status === 'success' ? 'bg-emerald-500' :
+                        adguardState.status === 'error' ? 'bg-red-500' : 'bg-slate-400'
                         }`}>
-                        <Server className="h-6 w-6" />
-                    </div>
-                    <div>
-                        <h2 className="text-base font-semibold text-slate-900">Integração com Motor DNS</h2>
-                        <p className="text-sm text-slate-500">Autenticação e status operacional do AdGuard via AWS.</p>
-
-                        {adguardState.status === 'success' && adguardState.dnsAddresses && (
-                            <p className="text-xs text-slate-500 mt-2 font-mono bg-slate-50 p-1.5 rounded inline-block border">
-                                IP do Servidor: {adguardState.dnsAddresses[0] || 'Desconhecido'}
-                            </p>
+                        {adguardState.status === 'success' && (
+                            <div className="absolute inset-0 h-2 w-2 rounded-full bg-emerald-400 animate-ping opacity-60" />
                         )}
                     </div>
-                </div>
-
-                <div className="flex flex-col items-start md:items-end">
-                    {adguardState.status === 'loading' ? (
-                        <span className="animate-pulse bg-slate-200 h-6 w-32 rounded"></span>
-                    ) : adguardState.status === 'success' ? (
-                        <div className="flex flex-col items-end">
-                            <div className="inline-flex items-center gap-2">
-                                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                                <span className="font-semibold text-green-700">Conectado ao AdGuard</span>
-                            </div>
-                            <span className="text-xs text-slate-500 mt-1">Servidor DNS AWS - {adguardState.version}</span>
-                            <span className="text-xs text-slate-500 mt-0.5">Status: {adguardState.running ? '🚀 Running' : '🔴 Parado'}</span>
-                        </div>
-                    ) : (
-                        <div className="flex flex-col items-end">
-                            <div className="inline-flex items-center gap-2">
-                                <AlertCircle className="h-5 w-5 text-red-600" />
-                                <span className="font-semibold text-red-700">Falha de conexão</span>
-                            </div>
-                            <span className="text-xs text-red-500 font-medium mt-1">{adguardState.errorMsg}</span>
-                        </div>
-                    )}
+                    <Server className="h-4 w-4 opacity-70" />
+                    {adguardState.status === 'loading' ? 'Verificando motor DNS...' :
+                        adguardState.status === 'success' ? `Motor DNS Ativo — ${adguardState.version ?? ''}` :
+                            `Falha: ${adguardState.errorMsg}`}
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                {cards.map((card) => {
+            {/* Metric Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {metricCards.map((card) => {
                     const Icon = card.icon;
                     return (
                         <div
-                            key={card.name}
-                            className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)] hover:shadow-md transition-shadow"
+                            key={card.label}
+                            className="card-premium p-5 transition-all duration-200 hover:translate-y-[ -2px]"
+                            style={{ borderLeft: `3px solid ${card.accent}` }}
                         >
-                            <dt>
-                                <div className={`absolute rounded-xl ${card.bg} border ${card.border} p-3`}>
-                                    <Icon className={`h-6 w-6 ${card.iconColor}`} aria-hidden="true" />
+                            <div className="flex items-start justify-between mb-4">
+                                <div className={`h-10 w-10 rounded-xl ${card.iconBg} flex items-center justify-center`}>
+                                    <Icon className={`h-5 w-5 ${card.iconClass}`} />
                                 </div>
-                                <p className="ml-16 truncate text-sm font-medium text-slate-500">
-                                    {card.name}
-                                </p>
-                            </dt>
-                            <dd className="ml-16 flex items-baseline pb-1 sm:pb-2 mt-1">
-                                {isLoading ? (
-                                    <p className="text-2xl font-bold text-slate-900 animate-pulse bg-slate-100 h-8 w-16 rounded"></p>
-                                ) : (
-                                    <p className="text-3xl font-bold tracking-tight text-slate-900">{card.value}</p>
-                                )}
-                            </dd>
+                            </div>
+                            {card.value === null ? (
+                                <div className="h-8 w-20 bg-slate-100 rounded-lg animate-pulse mb-1" />
+                            ) : (
+                                <p className="stat-value">{card.value}</p>
+                            )}
+                            <p className="text-sm font-semibold text-slate-700 mt-1">{card.label}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{card.sub}</p>
                         </div>
                     );
                 })}
             </div>
 
-            {/* Empty State Premium Modificado */}
-            {/* Empty State Premium Modificado com Grid */}
-            <div className="mt-8 grid grid-cols-1 lg:grid-cols-4 gap-6">
-
-                {/* Atividades Recentes / Threat Feed */}
-                <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-8 flex flex-col justify-center min-h-[300px] shadow-sm">
-                    <div className="mb-6 flex items-center justify-between">
+            {/* Charts + Tables */}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                {/* Area Chart — 3/5 */}
+                <div className="lg:col-span-3 card-premium p-6">
+                    <div className="flex items-center justify-between mb-6">
                         <div>
-                            <h3 className="text-base font-semibold text-slate-900">Volume de Tráfego</h3>
-                            <p className="text-sm text-slate-500">Consultas e ameaças mitigadas (últimas 24h)</p>
+                            <h3 className="text-sm font-bold text-slate-900">Volume de Tráfego DNS</h3>
+                            <p className="text-xs text-slate-400 mt-0.5">Consultas e bloqueios nas últimas 24 horas</p>
                         </div>
                         <div className="flex gap-4 text-xs font-medium">
-                            <span className="flex items-center gap-1.5 text-slate-600">
-                                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span> Consultas
+                            <span className="flex items-center gap-1.5 text-slate-500">
+                                <span className="h-2 w-2 rounded-full bg-blue-500" /> Consultas
                             </span>
-                            <span className="flex items-center gap-1.5 text-slate-600">
-                                <span className="h-2.5 w-2.5 rounded-full bg-rose-500"></span> Bloqueios
+                            <span className="flex items-center gap-1.5 text-slate-500">
+                                <span className="h-2 w-2 rounded-full bg-rose-500" /> Bloqueios
                             </span>
                         </div>
                     </div>
-
                     {chartSeries.length > 0 ? (
-                        <div className="h-64 mt-2">
+                        <div className="h-56">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={chartSeries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                <AreaChart data={chartSeries} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                                     <defs>
-                                        <linearGradient id="colorQueries" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
-                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                        <linearGradient id="gradQ" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
+                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                                         </linearGradient>
-                                        <linearGradient id="colorBlocks" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.2} />
-                                            <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
+                                        <linearGradient id="gradB" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.15} />
+                                            <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                    <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} minTickGap={30} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                                    <CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} minTickGap={30} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
                                     <Tooltip
-                                        contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                        itemStyle={{ fontSize: '13px', fontWeight: 500 }}
-                                        labelStyle={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}
+                                        contentStyle={{ borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 4px 16px rgba(15,23,42,0.08)', fontSize: 12 }}
+                                        labelStyle={{ color: '#64748b', fontWeight: 600, marginBottom: 4 }}
                                     />
-                                    <Area type="monotone" dataKey="queries" name="Consultas" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorQueries)" />
-                                    <Area type="monotone" dataKey="blocks" name="Bloqueios" stroke="#f43f5e" strokeWidth={2} fillOpacity={1} fill="url(#colorBlocks)" />
+                                    <Area type="monotone" dataKey="queries" name="Consultas" stroke="#3b82f6" strokeWidth={2} fill="url(#gradQ)" dot={false} />
+                                    <Area type="monotone" dataKey="blocks" name="Bloqueios" stroke="#ef4444" strokeWidth={2} fill="url(#gradB)" dot={false} />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
                     ) : (
-                        <div className="flex flex-col items-center justify-center flex-1 text-center py-6">
-                            <div className="mx-auto h-16 w-16 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center mb-5">
-                                <Activity className="h-8 w-8 text-slate-400" />
+                        <div className="h-56 flex flex-col items-center justify-center text-center">
+                            <div className="h-14 w-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center mb-4">
+                                <Activity className="h-7 w-7 text-slate-300" />
                             </div>
-                            <h3 className="text-base font-semibold text-slate-900">Aguardando telemetria</h3>
-                            <p className="text-slate-500 mt-2 text-sm max-w-sm">
-                                O gráfico histórico será populado automaticamente assim que clientes iniciarem tráfego no motor.
-                            </p>
+                            <p className="text-sm font-semibold text-slate-600">Aguardando telemetria</p>
+                            <p className="text-xs text-slate-400 mt-1 max-w-[220px]">O gráfico será populado quando clientes iniciarem tráfego.</p>
                         </div>
                     )}
                 </div>
 
-                {/* Top Domínios Bloqueados Contexto */}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-6 flex flex-col min-h-[300px] shadow-sm">
+                {/* Top Domains — 1/5 */}
+                <div className="lg:col-span-1 card-premium p-5 flex flex-col">
+                    <div className="flex items-center gap-2.5 mb-5">
+                        <div className="h-8 w-8 rounded-lg bg-rose-50 flex items-center justify-center border border-rose-100">
+                            <ShieldAlert className="h-4 w-4 text-rose-500" />
+                        </div>
+                        <div>
+                            <h3 className="text-xs font-bold text-slate-900 leading-none">Top Ameaças</h3>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Bloqueios frequentes</p>
+                        </div>
+                    </div>
                     {topDomains.length > 0 ? (
-                        <>
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="h-10 w-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center shadow-sm">
-                                    <ShieldAlert className="h-5 w-5 text-rose-500" />
-                                </div>
-                                <div>
-                                    <h3 className="text-base font-semibold text-slate-900">Ameaças Frequentes</h3>
-                                    <p className="text-xs text-slate-500">Top 5 domínios bloqueados (24h)</p>
-                                </div>
-                            </div>
-                            <ul className="space-y-3 flex-1">
-                                {topDomains.map((tp, idx) => (
-                                    <li key={idx} className="flex items-center justify-between group">
-                                        <div className="flex items-center gap-2 overflow-hidden">
-                                            <span className="text-xs font-medium text-slate-400 w-4">{idx + 1}.</span>
-                                            <span className="text-sm font-medium text-slate-700 truncate">{tp.domain}</span>
-                                        </div>
-                                        <span className="inline-flex items-center rounded-md bg-white border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 shadow-sm">
-                                            {tp.count}
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </>
+                        <ul className="space-y-2.5 flex-1">
+                            {topDomains.slice(0, 7).map((tp, idx) => (
+                                <li key={idx} className="flex items-center gap-2 group">
+                                    <span className="text-[10px] font-bold text-slate-300 w-4 flex-shrink-0 group-hover:text-rose-400 transition-colors">{idx + 1}</span>
+                                    <span className="text-xs text-slate-600 truncate flex-1 font-medium group-hover:text-slate-900 transition-colors">{tp.domain}</span>
+                                    <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 border border-rose-100 rounded px-1.5 py-0.5 flex-shrink-0">{fmt.format(tp.count)}</span>
+                                </li>
+                            ))}
+                        </ul>
                     ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center py-6 opacity-80">
-                            <div className="mx-auto h-12 w-12 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
-                                <ShieldAlert className="h-6 w-6 text-slate-300" />
-                            </div>
-                            <h3 className="text-sm font-semibold text-slate-600">Sem ameaças</h3>
-                            <p className="text-xs text-slate-400 mt-1 max-w-[200px]">Nenhum bloqueio em 24h.</p>
+                        <div className="flex-1 flex flex-col items-center justify-center text-center">
+                            <ShieldAlert className="h-8 w-8 text-slate-200 mb-2" />
+                            <p className="text-xs text-slate-400">Sem bloqueios registrados</p>
                         </div>
                     )}
                 </div>
 
-                {/* Auto-Learning Contexto */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 flex flex-col min-h-[300px] shadow-sm">
+                {/* Auto-Learning — 1/5 */}
+                <div className="lg:col-span-1 card-premium p-5 flex flex-col">
+                    <div className="flex items-center gap-2.5 mb-5">
+                        <div className="h-8 w-8 rounded-lg bg-violet-50 flex items-center justify-center border border-violet-100">
+                            <Globe className="h-4 w-4 text-violet-500" />
+                        </div>
+                        <div>
+                            <h3 className="text-xs font-bold text-slate-900 leading-none">Smart Shield</h3>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Descobertas por IA</p>
+                        </div>
+                    </div>
                     {suggestedDomains.length > 0 ? (
-                        <>
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="h-10 w-10 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center shadow-sm">
-                                    <Globe className="h-5 w-5 text-indigo-500" />
-                                </div>
-                                <div>
-                                    <h3 className="text-base font-semibold text-slate-900">Descobertas (AI)</h3>
-                                    <p className="text-xs text-slate-500">Heurística e evasões (24h)</p>
-                                </div>
-                            </div>
-                            <ul className="space-y-3 flex-1">
-                                {suggestedDomains.map((tp, idx) => (
-                                    <li key={idx} className="flex items-center justify-between group">
-                                        <div className="flex items-center gap-2 overflow-hidden py-1">
-                                            <span className="h-2 w-2 rounded-full bg-indigo-500 flex-shrink-0 animate-pulse"></span>
-                                            <span className="text-sm font-medium text-slate-700 truncate">{tp.domain}</span>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        </>
+                        <ul className="space-y-2.5 flex-1">
+                            {suggestedDomains.slice(0, 7).map((tp, idx) => (
+                                <li key={idx} className="flex items-center gap-2">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400 flex-shrink-0" />
+                                    <span className="text-xs text-slate-600 truncate font-medium">{tp.domain}</span>
+                                </li>
+                            ))}
+                        </ul>
                     ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center py-6 opacity-80">
-                            <div className="mx-auto h-12 w-12 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
-                                <Globe className="h-6 w-6 text-slate-300" />
-                            </div>
-                            <h3 className="text-sm font-semibold text-slate-600">Smart Shield</h3>
-                            <p className="text-xs text-slate-400 mt-1 max-w-[200px]">Aguardando IA detectar novas rotas de evasão.</p>
+                        <div className="flex-1 flex flex-col items-center justify-center text-center">
+                            <Globe className="h-8 w-8 text-slate-200 mb-2" />
+                            <p className="text-xs text-slate-400">Aguardando detecções da IA</p>
                         </div>
                     )}
                 </div>
