@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Database, Search, Layers, LayoutGrid, X, ExternalLink, ShieldAlert, CheckCircle2, ChevronRight } from 'lucide-react';
+import { Database, Search, Layers, LayoutGrid, X, ExternalLink, ShieldAlert, CheckCircle2, ChevronRight, Plus, Pencil, Settings } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useAuthStore } from '../../store/useAuthStore';
+import { CategoryFormModal, ServiceFormModal, DomainManagerModal } from './components/CatalogModals';
+import type { Category, Service } from './components/CatalogModals';
 
 interface CatalogItem {
     id: string;
@@ -43,6 +46,20 @@ export function ServiceCatalog() {
     const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
     const [itemDetails, setItemDetails] = useState<{ items: { name: string, count?: number, isUrl: boolean }[], loading: boolean }>({ items: [], loading: false });
 
+    const { profile } = useAuthStore();
+    const isAdmin = profile?.role === 'super_admin' || profile?.role === 'tecnico';
+
+    // State modals administrativo
+    const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
+    const [editingService, setEditingService] = useState<Partial<Service> | null>(null);
+    const [managingDomains, setManagingDomains] = useState<Service | null>(null);
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    const refresh = () => {
+        setRefreshKey(prev => prev + 1);
+        if (selectedItem) handleSelect(selectedItem); // recarrega tbm do slideover
+    };
+
     useEffect(() => {
         async function loadCatalog() {
             setIsLoading(true);
@@ -72,7 +89,7 @@ export function ServiceCatalog() {
         }
 
         loadCatalog();
-    }, []);
+    }, [refreshKey]);
 
     const filteredItems = (activeTab === 'categories' ? categories : services).filter(item =>
         safeLower(item.name).includes(safeLower(searchTerm)) ||
@@ -175,6 +192,15 @@ export function ServiceCatalog() {
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
+                    {isAdmin && activeTab !== 'blocklists' && (
+                        <button
+                            onClick={() => activeTab === 'categories' ? setEditingCategory({}) : setEditingService({})}
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-semibold rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
+                        >
+                            <Plus className="h-4 w-4" />
+                            {activeTab === 'categories' ? 'Nova Categoria' : 'Novo Serviço'}
+                        </button>
+                    )}
                 </div>
 
                 <div className="p-6 flex-1 bg-slate-50/30">
@@ -338,7 +364,7 @@ export function ServiceCatalog() {
                                                     </div>
                                                 </div>
 
-                                                <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30">
+                                                <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30 flex flex-col">
                                                     <div className="flex items-center justify-between mb-4">
                                                         <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                                                             <ShieldAlert className="h-4 w-4 text-slate-400" />
@@ -348,6 +374,34 @@ export function ServiceCatalog() {
                                                             {itemDetails.loading ? '...' : itemDetails.items.length} {activeTab === 'categories' ? 'serviços' : 'alvos'}
                                                         </span>
                                                     </div>
+
+                                                    {isAdmin && (
+                                                        <div className="flex flex-wrap items-center gap-2 mb-4 shrink-0">
+                                                            {activeTab === 'categories' ? (
+                                                                <>
+                                                                    <button onClick={() => { setSelectedItem(null); setEditingCategory({ id: selectedItem.id, name: selectedItem.name, description: selectedItem.description, icon: selectedItem.icon }); }}
+                                                                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-50 transition-colors">
+                                                                        <Pencil className="h-3.5 w-3.5" /> Editar
+                                                                    </button>
+                                                                    <button onClick={() => { setSelectedItem(null); setEditingService({ category_id: selectedItem.id }); }}
+                                                                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 text-blue-700 text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors">
+                                                                        <Plus className="h-3.5 w-3.5" /> Incluir Serviço
+                                                                    </button>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <button onClick={() => { setSelectedItem(null); setEditingService({ id: selectedItem.id, name: selectedItem.name, description: selectedItem.description, category_id: (selectedItem as any).category_id }); }}
+                                                                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-50 transition-colors">
+                                                                        <Pencil className="h-3.5 w-3.5" /> Editar
+                                                                    </button>
+                                                                    <button onClick={() => { setSelectedItem(null); setManagingDomains({ id: selectedItem.id, name: selectedItem.name } as Service); }}
+                                                                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 text-blue-700 text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors">
+                                                                        <Settings className="h-3.5 w-3.5" /> Gerenciar Domínios
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    )}
 
                                                     {itemDetails.loading ? (
                                                         <div className="flex flex-col items-center justify-center p-8 text-center bg-white rounded-xl border border-slate-200">
@@ -408,6 +462,31 @@ export function ServiceCatalog() {
                     )}
                 </div>
             </div>
+
+            {/* Modals de Admin (condicionais) */}
+            {editingCategory && (
+                <CategoryFormModal
+                    category={editingCategory}
+                    onClose={() => setEditingCategory(null)}
+                    onSave={refresh}
+                />
+            )}
+            {editingService && (
+                <ServiceFormModal
+                    service={editingService}
+                    defaultCategoryId={editingService.category_id}
+                    allCategories={categories as Category[]}
+                    onClose={() => setEditingService(null)}
+                    onSave={refresh}
+                />
+            )}
+            {managingDomains && (
+                <DomainManagerModal
+                    service={managingDomains}
+                    onClose={() => { setManagingDomains(null); refresh(); }}
+                />
+            )}
+
         </div>
     );
 }

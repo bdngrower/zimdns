@@ -15,25 +15,42 @@ import { ClientList } from './pages/clients/ClientList';
 import { ClientDetails } from './pages/clients/ClientDetails';
 import { ClientForm } from './pages/clients/ClientForm';
 import { ServiceCatalog } from './pages/catalog/ServiceCatalog';
-import { CatalogAdmin } from './pages/catalog/CatalogAdmin';
 import { Reports } from './pages/reports/Reports';
 import { Settings } from './pages/Settings';
 
 function App() {
-  const { setUser, isLoading } = useAuthStore();
+  const { setUser, setProfile, isLoading } = useAuthStore();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      useAuthStore.setState({ isLoading: false });
-    });
+    async function initAuth() {
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user ?? null;
+      setUser(user);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      if (user) {
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        if (profile) setProfile(profile);
+      }
+
+      useAuthStore.setState({ isLoading: false });
+    }
+
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const user = session?.user ?? null;
+      setUser(user);
+
+      if (user) {
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        if (profile) setProfile(profile);
+      } else {
+        setProfile(null);
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, [setUser]);
+  }, [setUser, setProfile]);
 
   if (isLoading) {
     return <div className="flex h-screen items-center justify-center bg-background">Carregando...</div>;
@@ -55,7 +72,6 @@ function App() {
             <Route path="/clients/:id/edit" element={<ClientForm />} />
             <Route path="/clients/:id" element={<ClientDetails />} />
             <Route path="/catalog/services" element={<ServiceCatalog />} />
-            <Route path="/catalog/admin" element={<CatalogAdmin />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />
           </Route>

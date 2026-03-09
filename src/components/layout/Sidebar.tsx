@@ -1,12 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Users, Settings, Database, Activity, Settings2 } from 'lucide-react';
+import { Home, Users, Settings, Database, Activity } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 const navItems = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Clientes', href: '/clients', icon: Users },
     { name: 'Catálogo', href: '/catalog/services', icon: Database },
-    { name: 'Admin Catálogo', href: '/catalog/admin', icon: Settings2 },
     { name: 'Relatórios', href: '/reports', icon: Activity },
     { name: 'Configurações', href: '/settings', icon: Settings },
 ];
