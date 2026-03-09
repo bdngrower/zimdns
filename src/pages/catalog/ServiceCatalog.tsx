@@ -47,7 +47,13 @@ export function ServiceCatalog() {
     const [itemDetails, setItemDetails] = useState<{ items: { name: string, count?: number, isUrl: boolean }[], loading: boolean }>({ items: [], loading: false });
 
     const { profile } = useAuthStore();
-    const isAdmin = profile?.role === 'super_admin' || profile?.role === 'tecnico';
+
+    // Log detalhado para entender porquê sumiram os botões admin
+    useEffect(() => {
+        console.log("Auth Profile Debug:", profile);
+    }, [profile]);
+
+    const isAdmin = profile?.role === 'super_admin' || profile?.role === 'tecnico' || profile?.role === 'admin';
 
     // State modals administrativo
     const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
