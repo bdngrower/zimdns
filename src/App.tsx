@@ -23,16 +23,29 @@ function App() {
 
   useEffect(() => {
     async function initAuth() {
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user ?? null;
-      setUser(user);
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
 
-      if (user) {
-        const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        if (profile) setProfile(profile);
+        const user = session?.user ?? null;
+        setUser(user);
+
+        if (user) {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (!profileError && profile) {
+            setProfile(profile);
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+      } finally {
+        useAuthStore.setState({ isLoading: false });
       }
-
-      useAuthStore.setState({ isLoading: false });
     }
 
     initAuth();
