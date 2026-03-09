@@ -41,7 +41,7 @@ export function ServiceCatalog() {
 
     // Slideover states
     const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
-    const [itemDetails, setItemDetails] = useState<{ items: string[], loading: boolean }>({ items: [], loading: false });
+    const [itemDetails, setItemDetails] = useState<{ items: { name: string, count?: number, isUrl: boolean }[], loading: boolean }>({ items: [], loading: false });
 
     useEffect(() => {
         async function loadCatalog() {
@@ -86,15 +86,15 @@ export function ServiceCatalog() {
 
         try {
             if (activeTab === 'categories') {
-                // Fetch services for this category
+                // Fetch services for this category from the unified view
                 const { data, error } = await supabase
-                    .from('service_catalog')
-                    .select('name')
+                    .from('catalog_services_full')
+                    .select('name, domain_count')
                     .eq('category_id', item.id)
                     .order('name');
 
                 if (!error && data) {
-                    setItemDetails({ items: data.map(d => d.name), loading: false });
+                    setItemDetails({ items: data.map(d => ({ name: d.name, count: d.domain_count, isUrl: false })), loading: false });
                 } else {
                     setItemDetails({ items: [], loading: false });
                 }
@@ -106,7 +106,7 @@ export function ServiceCatalog() {
                     .eq('service_id', item.id);
 
                 if (!error && data) {
-                    setItemDetails({ items: data.map(d => d.domain), loading: false });
+                    setItemDetails({ items: data.map(d => ({ name: d.domain, isUrl: true })), loading: false });
                 } else {
                     setItemDetails({ items: [], loading: false });
                 }
@@ -364,19 +364,26 @@ export function ServiceCatalog() {
                                                         </div>
                                                     ) : (
                                                         <ul className="space-y-2">
-                                                            {itemDetails.items.map((itemName, index) => (
+                                                            {itemDetails.items.map((listItem, index) => (
                                                                 <li key={index} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-slate-300 group">
-                                                                    <span className="text-sm font-medium text-slate-700 truncate">{itemName}</span>
-                                                                    {activeTab === 'services' && (
-                                                                        <a
-                                                                            href={`https://${itemName}`}
-                                                                            target="_blank"
-                                                                            rel="noopener noreferrer"
-                                                                            className="text-slate-300 hover:text-accent opacity-0 group-hover:opacity-100 transition-all p-1"
-                                                                        >
-                                                                            <ExternalLink className="h-3.5 w-3.5" />
-                                                                        </a>
-                                                                    )}
+                                                                    <span className="text-sm font-medium text-slate-700 truncate">{listItem.name}</span>
+                                                                    <div className="flex items-center gap-3">
+                                                                        {listItem.count !== undefined && listItem.count > 0 && (
+                                                                            <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-medium border border-slate-200 shrink-0">
+                                                                                {new Intl.NumberFormat("pt-BR", { notation: "compact", compactDisplay: "short" }).format(listItem.count)} domínios
+                                                                            </span>
+                                                                        )}
+                                                                        {listItem.isUrl && (
+                                                                            <a
+                                                                                href={`https://${listItem.name}`}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="text-slate-300 hover:text-accent opacity-0 group-hover:opacity-100 transition-all p-1"
+                                                                            >
+                                                                                <ExternalLink className="h-3.5 w-3.5" />
+                                                                            </a>
+                                                                        )}
+                                                                    </div>
                                                                 </li>
                                                             ))}
                                                         </ul>
