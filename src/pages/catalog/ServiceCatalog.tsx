@@ -41,7 +41,7 @@ export function ServiceCatalog() {
 
     // Slideover states
     const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
-    const [itemDetails, setItemDetails] = useState<{ domains: string[], loading: boolean }>({ domains: [], loading: false });
+    const [itemDetails, setItemDetails] = useState<{ items: string[], loading: boolean }>({ items: [], loading: false });
 
     useEffect(() => {
         async function loadCatalog() {
@@ -82,24 +82,37 @@ export function ServiceCatalog() {
 
     const handleSelect = async (item: CatalogItem) => {
         setSelectedItem(item);
-        setItemDetails({ domains: [], loading: true });
+        setItemDetails({ items: [], loading: true });
 
         try {
-            const table = activeTab === 'categories' ? 'category_domains' : 'service_domains';
-            const idColumn = activeTab === 'categories' ? 'category_id' : 'service_id';
+            if (activeTab === 'categories') {
+                // Fetch services for this category
+                const { data, error } = await supabase
+                    .from('service_catalog')
+                    .select('name')
+                    .eq('category_id', item.id)
+                    .order('name');
 
-            const { data, error } = await supabase
-                .from(table)
-                .select('domain')
-                .eq(idColumn, item.id);
-
-            if (!error && data) {
-                setItemDetails({ domains: data.map(d => d.domain), loading: false });
+                if (!error && data) {
+                    setItemDetails({ items: data.map(d => d.name), loading: false });
+                } else {
+                    setItemDetails({ items: [], loading: false });
+                }
             } else {
-                setItemDetails({ domains: [], loading: false });
+                // Fetch domains for this service
+                const { data, error } = await supabase
+                    .from('service_domains')
+                    .select('domain')
+                    .eq('service_id', item.id);
+
+                if (!error && data) {
+                    setItemDetails({ items: data.map(d => d.domain), loading: false });
+                } else {
+                    setItemDetails({ items: [], loading: false });
+                }
             }
         } catch {
-            setItemDetails({ domains: [], loading: false });
+            setItemDetails({ items: [], loading: false });
         }
     };
 
@@ -253,9 +266,16 @@ export function ServiceCatalog() {
                                                 </span>
                                             )}
                                             {activeTab === 'categories' && (item.service_count ?? 0) > 0 && (
-                                                <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded-md font-medium border border-blue-100 shadow-sm">
-                                                    {item.service_count} serviços
-                                                </span>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded-md font-medium border border-blue-100 shadow-sm">
+                                                        {item.service_count} serviços
+                                                    </span>
+                                                    {(item.total_domains ?? 0) > 0 && (
+                                                        <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-1 rounded-md font-medium border border-slate-200 shadow-sm" title={`${item.total_domains} domínios agregados`}>
+                                                            {new Intl.NumberFormat("pt-BR", { notation: "compact", compactDisplay: "short" }).format(item.total_domains ?? 0)} domínios
+                                                        </span>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                         <p className="text-sm text-slate-500 mt-2 line-clamp-2 leading-relaxed">
@@ -322,37 +342,41 @@ export function ServiceCatalog() {
                                                     <div className="flex items-center justify-between mb-4">
                                                         <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                                                             <ShieldAlert className="h-4 w-4 text-slate-400" />
-                                                            Domínios Interceptados
+                                                            {activeTab === 'categories' ? 'Serviços Vinculados' : 'Domínios Interceptados'}
                                                         </h3>
                                                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-                                                            {itemDetails.loading ? '...' : itemDetails.domains.length} alvos
+                                                            {itemDetails.loading ? '...' : itemDetails.items.length} {activeTab === 'categories' ? 'serviços' : 'alvos'}
                                                         </span>
                                                     </div>
 
                                                     {itemDetails.loading ? (
                                                         <div className="flex flex-col items-center justify-center p-8 text-center bg-white rounded-xl border border-slate-200">
                                                             <div className="h-6 w-6 border-2 border-accent border-t-transparent animate-spin rounded-full mb-3" />
-                                                            <span className="text-sm text-slate-500">Mapeando domínios...</span>
+                                                            <span className="text-sm text-slate-500">Mapeando vinculações...</span>
                                                         </div>
-                                                    ) : itemDetails.domains.length === 0 ? (
+                                                    ) : itemDetails.items.length === 0 ? (
                                                         <div className="flex flex-col items-center justify-center p-8 text-center bg-white rounded-xl border border-slate-200 border-dashed">
                                                             <Database className="h-8 w-8 text-slate-300 mb-3" />
-                                                            <span className="text-sm font-medium text-slate-900">Nenhum domínio</span>
-                                                            <span className="text-xs text-slate-500 mt-1">O pacote não possui assinaturas listadas.</span>
+                                                            <span className="text-sm font-medium text-slate-900">
+                                                                {activeTab === 'categories' ? 'Nenhum serviço' : 'Nenhum domínio'}
+                                                            </span>
+                                                            <span className="text-xs text-slate-500 mt-1">O pacote não possui vinculações listadas.</span>
                                                         </div>
                                                     ) : (
                                                         <ul className="space-y-2">
-                                                            {itemDetails.domains.map((domain, index) => (
+                                                            {itemDetails.items.map((itemName, index) => (
                                                                 <li key={index} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-slate-300 group">
-                                                                    <span className="text-sm font-medium text-slate-700 truncate">{domain}</span>
-                                                                    <a
-                                                                        href={`https://${domain}`}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="text-slate-300 hover:text-accent opacity-0 group-hover:opacity-100 transition-all p-1"
-                                                                    >
-                                                                        <ExternalLink className="h-3.5 w-3.5" />
-                                                                    </a>
+                                                                    <span className="text-sm font-medium text-slate-700 truncate">{itemName}</span>
+                                                                    {activeTab === 'services' && (
+                                                                        <a
+                                                                            href={`https://${itemName}`}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="text-slate-300 hover:text-accent opacity-0 group-hover:opacity-100 transition-all p-1"
+                                                                        >
+                                                                            <ExternalLink className="h-3.5 w-3.5" />
+                                                                        </a>
+                                                                    )}
                                                                 </li>
                                                             ))}
                                                         </ul>
