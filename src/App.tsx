@@ -15,6 +15,7 @@ import { ClientList } from './pages/clients/ClientList';
 import { ClientDetails } from './pages/clients/ClientDetails';
 import { ClientForm } from './pages/clients/ClientForm';
 import { ServiceCatalog } from './pages/catalog/ServiceCatalog';
+import { CatalogAdmin } from './pages/catalog/CatalogAdmin';
 import { Reports } from './pages/reports/Reports';
 import { Settings } from './pages/Settings';
 
@@ -54,6 +55,7 @@ function App() {
             <Route path="/clients/:id/edit" element={<ClientForm />} />
             <Route path="/clients/:id" element={<ClientDetails />} />
             <Route path="/catalog/services" element={<ServiceCatalog />} />
+            <Route path="/catalog/admin" element={<CatalogAdmin />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
