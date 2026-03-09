@@ -43,6 +43,8 @@ function App() {
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
+        setUser(null);
+        setProfile(null);
       } finally {
         useAuthStore.setState({ isLoading: false });
       }
@@ -51,14 +53,18 @@ function App() {
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const user = session?.user ?? null;
-      setUser(user);
+      try {
+        const user = session?.user ?? null;
+        setUser(user);
 
-      if (user) {
-        const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        if (profile) setProfile(profile);
-      } else {
-        setProfile(null);
+        if (user) {
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+          if (profile) setProfile(profile);
+        } else {
+          setProfile(null);
+        }
+      } catch (err) {
+        console.error('Error on auth state change:', err);
       }
     });
 
