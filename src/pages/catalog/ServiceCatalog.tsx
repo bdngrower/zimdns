@@ -28,6 +28,9 @@ interface BlocklistEntry {
     domain_count: number;
 }
 
+// Helper defensivo: evita TypeError se o valor vier null/undefined
+const safeLower = (v?: string | null) => (v ?? '').toLowerCase();
+
 export function ServiceCatalog() {
     const [services, setServices] = useState<CatalogItem[]>([]);
     const [categories, setCategories] = useState<CatalogItem[]>([]);
@@ -52,7 +55,17 @@ export function ServiceCatalog() {
             ]);
 
             if (!servicesRes.error) setServices(servicesRes.data ?? []);
-            if (!categoriesRes.error) setCategories(categoriesRes.data ?? []);
+            if (!categoriesRes.error) {
+                // catalog_categories_summary retorna "category_name" e "category_id"
+                // Normalizamos para o shape de CatalogItem (name, id) aqui
+                setCategories(
+                    (categoriesRes.data ?? []).map((c: any) => ({
+                        ...c,
+                        id: c.category_id ?? c.id,   // garante campo id
+                        name: c.category_name ?? c.name ?? '', // garante campo name
+                    }))
+                );
+            }
             if (!blocklistsRes.error) setBlocklists(blocklistsRes.data ?? []);
 
             setIsLoading(false);
@@ -62,8 +75,9 @@ export function ServiceCatalog() {
     }, []);
 
     const filteredItems = (activeTab === 'categories' ? categories : services).filter(item =>
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase()))
+        safeLower(item.name).includes(safeLower(searchTerm)) ||
+        safeLower(item.description).includes(safeLower(searchTerm)) ||
+        safeLower((item as any).category_name).includes(safeLower(searchTerm))
     );
 
     const handleSelect = async (item: CatalogItem) => {
