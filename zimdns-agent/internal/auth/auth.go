@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/zimdns/agent/internal/config"
 	"github.com/zimdns/agent/internal/utils"

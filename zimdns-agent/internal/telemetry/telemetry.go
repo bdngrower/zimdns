@@ -3,12 +3,10 @@ package telemetry
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
 	"github.com/zimdns/agent/internal/auth"
-	"github.com/zimdns/agent/internal/config"
 )
 
 type HeartbeatPayload struct {
