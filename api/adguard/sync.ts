@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { syncAdGuardClient, getAdGuardConfig, toAdGuardClientId } from './_adguardClient';
+import { syncAdGuardClient, getAdGuardConfig, toAdGuardClientId } from './_adguardClient.js';
 
 // Vercel Severless route para forçar trigger de sincronização de regras de 1 cliente.
 // Estendido com sincronização do AdGuard Persistent Client (ClientID para uso no DoH Proxy).
