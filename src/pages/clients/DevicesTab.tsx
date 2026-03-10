@@ -52,13 +52,17 @@ export function DevicesTab({ clientId }: DevicesTabProps) {
     }
 
     async function loadDevices() {
-        const { data } = await supabase
+        const { data, error } = await supabase
             .from('devices')
             .select('*')
             .eq('client_id', clientId)
             .order('last_seen_at', { ascending: false });
 
-        if (data) setDevices(data);
+        if (error) {
+            console.error('[DevicesTab] loadDevices error:', error);
+        } else if (data) {
+            setDevices(data);
+        }
         setIsLoading(false);
     }
 
