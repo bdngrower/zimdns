@@ -10,7 +10,6 @@ import {
     Activity, 
     History, 
     Info, 
-    Calendar,
     LayoutDashboard,
     Terminal,
     Shield

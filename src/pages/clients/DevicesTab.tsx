@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import type { Device, DeviceStatus, UserRole } from '../../types';
+import type { Device, UserRole } from '../../types';
 import { 
     Laptop, 
     Smartphone, 
@@ -14,7 +14,8 @@ import {
     Activity,
     Wifi,
     Globe,
-    ShieldAlert
+    ShieldAlert,
+    Info
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
