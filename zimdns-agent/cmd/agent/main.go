@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -13,16 +14,65 @@ import (
 	"github.com/zimdns/agent/internal/telemetry"
 	"github.com/zimdns/agent/internal/utils"
 	"github.com/rs/zerolog/log"
+	"github.com/kardianos/service"
 )
+
+type program struct {
+	exit      chan struct{}
+	dnsServer *dns.Server
+}
+
+func (p *program) Start(s service.Service) error {
+	p.exit = make(chan struct{})
+	go p.run()
+	return nil
+}
+
+func (p *program) run() {
+	log.Info().Msg("ZIM DNS Agent service starting...")
+
+	// 1. Load config
+	if _, err := config.Load(); err != nil {
+		log.Error().Err(err).Msg("Failed to load configuration in service")
+		return
+	}
+
+	// 2. Start DNS Stub
+	p.dnsServer = dns.NewServer()
+	if err := p.dnsServer.Start("127.0.53.1:53"); err != nil {
+		log.Error().Err(err).Msg("Failed to start DNS stub in service")
+		return
+	}
+
+	// 3. Start Telemetry Loops
+	go heartbeatLoop()
+	go inventoryLoop()
+	go configPollLoop()
+
+	log.Info().Msg("ZIM DNS Agent is running in background")
+	<-p.exit
+}
+
+func (p *program) Stop(s service.Service) error {
+	log.Info().Msg("ZIM DNS Agent service stopping...")
+	close(p.exit)
+	if p.dnsServer != nil {
+		p.dnsServer.Stop()
+	}
+	return nil
+}
 
 func main() {
 	var bootstrapUrl string
 	var bootstrapToken string
+	var serviceAction string
 	debug := false
+	silent := false
 
-	// Manual argument parsing to support /PARAM=VAL and other formats
+	// Manual argument parsing
 	for _, arg := range os.Args[1:] {
-		if strings.HasPrefix(strings.ToUpper(arg), "/BOOTSTRAP_URL=") {
+		upperArg := strings.ToUpper(arg)
+		if strings.HasPrefix(upperArg, "/BOOTSTRAP_URL=") {
 			bootstrapUrl = arg[len("/BOOTSTRAP_URL="):]
 		} else if strings.HasPrefix(arg, "--bootstrap-url=") {
 			bootstrapUrl = arg[len("--bootstrap-url="):]
@@ -30,56 +80,123 @@ func main() {
 			bootstrapToken = arg[len("-enroll="):]
 		} else if arg == "--debug" || arg == "-debug" {
 			debug = true
-		} else if strings.ToUpper(arg) == "/SILENT" {
-			// Ignore /SILENT
+		} else if upperArg == "/SILENT" {
+			silent = true
+		} else if arg == "install" || arg == "uninstall" || arg == "start" || arg == "stop" || arg == "restart" {
+			serviceAction = arg
 		}
 	}
 
-	// 1. Init logger
+	// 1. Init logger (always to file if possible)
 	utils.InitLogger(debug)
-	log.Info().Msgf("ZIM DNS Agent v1 starting (Args: %v)", os.Args)
+	
+	// Service configuration
+	svcConfig := &service.Config{
+		Name:        "ZimDNSAgent",
+		DisplayName: "ZIM DNS Agent",
+		Description: "ZIM DNS Secure Resolver and Asset Management Agent",
+	}
 
-	// 2. Load/Init config
+	prg := &program{}
+	s, err := service.New(prg, svcConfig)
+	if err != nil {
+		fmt.Printf("Error creating service: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Protocol for /SILENT: Enroll -> Install -> Start -> Exit
+	if silent {
+		log.Info().Msg("Starting silent installation flow...")
+		
+		// Load existing config to check enrollment
+		cfg, _ := config.Load()
+		if cfg.DeviceId == "" {
+			token := bootstrapToken
+			if bootstrapUrl != "" {
+				if err := auth.EnsureEnrolled(bootstrapUrl); err != nil {
+					log.Fatal().Err(err).Msg("Silent enrollment via URL failed")
+				}
+			} else {
+				if token == "" {
+					token = os.Getenv("ZIMDNS_ENROLL_TOKEN")
+				}
+				if err := auth.EnsureEnrolled(token); err != nil {
+					log.Fatal().Err(err).Msg("Silent enrollment failed")
+				}
+			}
+			log.Info().Msg("Enrollment successful during silent install")
+		} else {
+			log.Info().Msg("Device already enrolled, skipping enrollment phase")
+		}
+
+		// Install service
+		if err := s.Install(); err != nil {
+			if strings.Contains(err.Error(), "already exists") {
+				log.Info().Msg("Service already installed, continuing")
+			} else {
+				log.Fatal().Err(err).Msg("Failed to install service during silent flow")
+			}
+		} else {
+			log.Info().Msg("Service installed successfully")
+		}
+
+		// Start service
+		if err := service.Control(s, "start"); err != nil {
+			if strings.Contains(err.Error(), "already running") {
+				log.Info().Msg("Service already running")
+			} else {
+				log.Fatal().Err(err).Msg("Failed to start service during silent flow")
+			}
+		} else {
+			log.Info().Msg("Service started successfully")
+		}
+
+		log.Info().Msg("Silent installation completed. Agent is running in background.")
+		return
+	}
+
+	// Handle explicit service actions (debug/manual)
+	if serviceAction != "" {
+		err := service.Control(s, serviceAction)
+		if err != nil {
+			fmt.Printf("Valid actions: %q\n", service.ControlAction)
+			log.Fatal().Err(err).Msgf("Failed to perform %s", serviceAction)
+		}
+		return
+	}
+
+	// Run as service (or foreground if interactive)
+	err = s.Run()
+	if err != nil {
+		log.Error().Err(err).Msg("Service run failed")
+		
+		// Fallback to foreground if interactive
+		if service.Interactive() {
+			log.Info().Msg("Running in foreground (interactive mode)...")
+			runForeground()
+		}
+	}
+}
+
+func runForeground() {
+	// Standard foreground execution (legacy/debug)
 	if _, err := config.Load(); err != nil {
 		log.Fatal().Err(err).Msg("Failed to load configuration")
 	}
 
-	// 3. Ensure enrollment
-	// Priority: 1. /BOOTSTRAP_URL, 2. -enroll flag, 3. Env var
-	token := bootstrapToken
-	if bootstrapUrl != "" {
-		// If bootstrapUrl is provided, we use it to enroll
-		// auth.EnsureEnrolled will extract the token and override ApiUrl if needed
-		if err := auth.EnsureEnrolled(bootstrapUrl); err != nil {
-			log.Fatal().Err(err).Msg("Device enrollment via URL failed")
-		}
-	} else {
-		if token == "" {
-			token = os.Getenv("ZIMDNS_ENROLL_TOKEN")
-		}
-		if err := auth.EnsureEnrolled(token); err != nil {
-			log.Fatal().Err(err).Msg("Device enrollment failed")
-		}
-	}
-	
-	// Refresh config after enrollment (internal state is already updated)
-
-	// 4. Start DNS Stub
 	dnsServer := dns.NewServer()
 	if err := dnsServer.Start("127.0.53.1:53"); err != nil {
 		log.Fatal().Err(err).Msg("Failed to start DNS stub")
 	}
 
-	// 5. Start Telemetry Loops
 	go heartbeatLoop()
 	go inventoryLoop()
 	go configPollLoop()
 
-	// 6. Graceful Shutdown
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	log.Info().Msg("ZIM DNS Agent is running and protecting this device")
+	log.Info().Msg("ZIM DNS Agent is running in foreground")
 	<-stop
 
 	log.Info().Msg("Shutting down ZIM DNS Agent...")
@@ -92,22 +209,19 @@ func heartbeatLoop() {
 	ticker := time.NewTicker(time.Duration(cfg.HeartbeatSec) * time.Second)
 	defer ticker.Stop()
 
-	// Immediate first heartbeat
 	sendHB()
-
 	for range ticker.C {
 		sendHB()
 	}
 }
 
 func sendHB() {
-	// In v1, we assume network info collection is simple
 	hb := telemetry.HeartbeatPayload{
-		DohOk:        true, // This should be checked by probing the proxy
-		DohLatencyMs: 10,   // Placeholder
+		DohOk:        true, 
+		DohLatencyMs: 10,  
 		DnsStubOk:    true,
 		NetworkType:  "ethernet",
-		PublicIp:     "", // Backend will detect public IP
+		PublicIp:     "", 
 	}
 	if err := telemetry.SendHeartbeat(hb); err != nil {
 		log.Warn().Err(err).Msg("Failed to send heartbeat")
@@ -119,9 +233,7 @@ func inventoryLoop() {
 	ticker := time.NewTicker(time.Duration(cfg.InventoryMin) * time.Minute)
 	defer ticker.Stop()
 
-	// Immediate first inventory
 	sendInv()
-
 	for range ticker.C {
 		sendInv()
 	}
@@ -137,13 +249,10 @@ func sendInv() {
 }
 
 func configPollLoop() {
-	// Poll every 5 minutes for revocation or config changes
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		// This would call GET /api/agent/config
-		// Implement polling logic if needed for v1
 		log.Debug().Msg("Polling for configuration updates...")
 	}
 }

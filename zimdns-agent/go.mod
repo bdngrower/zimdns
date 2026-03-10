@@ -5,6 +5,7 @@ go 1.21
 require (
 	github.com/miekg/dns v1.1.58
 	github.com/rs/zerolog v1.32.0
+	github.com/kardianos/service v1.2.2
 )
 
 require (

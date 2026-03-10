@@ -100,7 +100,8 @@ async function handleEnroll(req: any, res: any) {
                 hostname, hardware_id, os_name, os_version,
                 architecture, manufacturer, model, agent_version,
                 client_policy_id: tokenRow.client_policy_id,
-                status: 'active'
+                status: 'active',
+                last_seen_at: new Date().toISOString()
             })
             .select('id').single();
 
@@ -221,7 +222,8 @@ async function handleInventory(req: any, res: any) {
         await supabase.from('devices').update({
             hostname: inventory.hostname, os_name: inventory.os_name, os_version: inventory.os_version,
             architecture: inventory.architecture, manufacturer: inventory.manufacturer, model: inventory.model,
-            agent_version: inventory.agent_version, hardware_id: inventory.hardware_id, updated_at: now
+            agent_version: inventory.agent_version, hardware_id: inventory.hardware_id, 
+            updated_at: now, last_seen_at: now
         }).eq('id', device.deviceId);
 
         return res.status(200).json({ ok: true });
