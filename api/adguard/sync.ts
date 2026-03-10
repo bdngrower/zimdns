@@ -22,27 +22,48 @@ export default async function handler(req: any, res: any) {
         return res.status(500).json({ success: false, message: 'Faltam váriaveis de ambiente do Supabase.' });
     }
 
+    // Declara variável para controle de lock
+    let lockAcquired = false;
+
     try {
         supabase = createClient(supabaseUrl, supabaseKey);
         const startedAt = new Date().toISOString();
 
+        // ---------------------------------------------------------------
+        // PASSO 0: Adquirir Lock Global Atômico
+        // ---------------------------------------------------------------
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { data: lockData, error: lockErr } = await supabase
+            .from('sync_state')
+            .update({ is_running: true, started_at: startedAt })
+            .eq('id', 1)
+            .or(`is_running.eq.false,started_at.lt.${fiveMinutesAgo}`)
+            .select();
+
+        if (lockErr) {
+            console.error("Erro ao adquirir lock de sync:", lockErr);
+            return res.status(500).json({ success: false, message: 'Erro interno ao verificar concorrência.' });
+        }
+
+        if (!lockData || lockData.length === 0) {
+            console.warn(`[AdGuard Sync] Sync global já está em execução. Abortando request para client ${clientId}.`);
+            return res.status(409).json({ success: false, message: 'Um sync global já está em andamento. Tente novamente em instantes.' });
+        }
+        
+        lockAcquired = true;
+
         const adguardConfig = getAdGuardConfig();
 
         // ---------------------------------------------------------------
-        // PASSO 0: Sincronizar o Persistent Client no AdGuard Home
+        // PASSO 1: Sincronizar o Persistent Client no AdGuard Home
         //
-        // Garante que o client do ZIM DNS tenha um ClientID estável
-        // registrado no AdGuard, used pelo DoH Proxy no path da URL:
-        //   http://<adguard-interno>/dns-query/<adguard_client_id>
-        //
-        // adguard_client_id = "zimdns-" + client_uuid_sem_hifens
-        // Operação idempotente: cria ou atualiza conforme necessário.
+        // Garante que o client do ZIM DNS tenha os identificadores
+        // registrados no AdGuard (ClientID e IPs públicos da rede).
         // ---------------------------------------------------------------
 
-        // Buscar o nome do client para uso no label do AdGuard
         const { data: clientData, error: clientErr } = await supabase
             .from('clients')
-            .select('id, name')
+            .select('id, name, primary_dns_ip')
             .eq('id', clientId)
             .single();
 
@@ -52,31 +73,12 @@ export default async function handler(req: any, res: any) {
 
         let adguardClientId: string;
         try {
-            adguardClientId = await syncAdGuardClient(clientData.id, clientData.name, adguardConfig);
+            const publicIps = clientData.primary_dns_ip ? [clientData.primary_dns_ip] : [];
+            adguardClientId = await syncAdGuardClient(clientData.id, clientData.name, adguardConfig, publicIps);
             console.log(`[AdGuard Sync] Persistent Client sincronizado: ${adguardClientId}`);
         } catch (clientSyncErr: any) {
-            // Falha no sync do client NÃO deve bloquear o sync de regras —
-            // logar e continuar. O próximo sync tentará novamente.
             console.error(`[AdGuard Sync] Falha ao sincronizar Persistent Client: ${clientSyncErr.message}`);
-            adguardClientId = toAdGuardClientId(clientId); // usar o slug calculado mesmo sem confirmação
-        }
-
-        // ---------------------------------------------------------------
-        // PASSO 1: Sincronizar Persistent Client (operação pontual)
-        // ---------------------------------------------------------------
-        const { data: triggerClient, error: triggerClientErr } = await supabase
-            .from('clients')
-            .select('id, name')
-            .eq('id', clientId)
-            .single();
-
-        if (triggerClient) {
-            try {
-                await syncAdGuardClient(triggerClient.id, triggerClient.name, adguardConfig);
-                console.log(`[AdGuard Sync] Trigger point client synced: ${triggerClient.id}`);
-            } catch (err: any) {
-                console.error(`[AdGuard Sync] Failed to sync trigger client: ${err.message}`);
-            }
+            adguardClientId = toAdGuardClientId(clientId);
         }
 
         // ---------------------------------------------------------------
@@ -270,5 +272,13 @@ export default async function handler(req: any, res: any) {
             success: false,
             message: errMsg
         });
+    } finally {
+        if (supabase && lockAcquired) {
+            await supabase
+                .from('sync_state')
+                .update({ is_running: false, started_at: null })
+                .eq('id', 1);
+            console.log(`[AdGuard Sync] Global Lock released.`);
+        }
     }
 }

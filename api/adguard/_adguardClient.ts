@@ -82,12 +82,19 @@ export async function syncAdGuardClient(
   clientId: string,
   clientName: string,
   config: AdGuardClientConfig,
+  publicIps: string[] = []
 ): Promise<string> {
   const adguardClientId = toAdGuardClientId(clientId);
 
+  const validIps = publicIps.filter(ip => ip && ip.trim().length > 0);
+  const identifiers = [
+    adguardClientId,
+    ...validIps
+  ];
+
   const clientPayload: AdGuardPersistentClient = {
     name: `ZimDNS - ${clientName}`,
-    ids: [adguardClientId],
+    ids: identifiers,
     use_global_settings: false,
     use_global_blocked_services: true,
     filtering_enabled: true,

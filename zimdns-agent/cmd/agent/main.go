@@ -43,6 +43,10 @@ func (p *program) run() {
 		log.Error().Err(err).Msg("Failed to start DNS stub in service")
 		return
 	}
+	
+	if err := dns.SetSystemDNS(); err != nil {
+		log.Warn().Err(err).Msg("Could not set system DNS override. Local DNS traffic might bypass proxy.")
+	}
 
 	// 3. Start Telemetry Loops
 	go heartbeatLoop()
@@ -59,6 +63,7 @@ func (p *program) Stop(s service.Service) error {
 	if p.dnsServer != nil {
 		p.dnsServer.Stop()
 	}
+	dns.RestoreSystemDNS()
 	return nil
 }
 
@@ -189,6 +194,10 @@ func runForeground() {
 		log.Fatal().Err(err).Msg("Failed to start DNS stub")
 	}
 
+	if err := dns.SetSystemDNS(); err != nil {
+		log.Warn().Err(err).Msg("Could not set system DNS override.")
+	}
+
 	go heartbeatLoop()
 	go inventoryLoop()
 	go configPollLoop()
@@ -201,6 +210,7 @@ func runForeground() {
 
 	log.Info().Msg("Shutting down ZIM DNS Agent...")
 	dnsServer.Stop()
+	dns.RestoreSystemDNS()
 	log.Info().Msg("ZIM DNS Agent stopped")
 }
 
@@ -221,7 +231,7 @@ func sendHB() {
 		DohLatencyMs: 10,  
 		DnsStubOk:    true,
 		NetworkType:  "ethernet",
-		PublicIp:     "", 
+		PublicIp:     utils.GetPublicIP(), 
 	}
 	if err := telemetry.SendHeartbeat(hb); err != nil {
 		log.Warn().Err(err).Msg("Failed to send heartbeat")
