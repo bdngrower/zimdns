@@ -9,7 +9,6 @@ import (
 
 	"github.com/zimdns/agent/internal/auth"
 	"github.com/zimdns/agent/internal/config"
-	"github.com/rs/zerolog/log"
 )
 
 type HeartbeatPayload struct {

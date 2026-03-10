@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-
-	"github.com/rs/zerolog/log"
 )
 
 type AgentConfig struct {
