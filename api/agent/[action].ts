@@ -154,11 +154,20 @@ async function handleEnrollmentTokens(req: any, res: any) {
 
             if (error) return res.status(500).json({ error: 'Erro ao criar token' });
 
-            const dohUrl = process.env.ZIMDNS_DOH_URL ?? '';
-            const installCommand = `zimdns-agent-setup.exe /SILENT /BOOTSTRAP_URL=${dohUrl ? dohUrl.replace('/dns-query', '') : 'https://<doh-hostname>'}/api/agent/enroll?token=${raw}`;
+            const appBaseUrl = process.env.ZIMDNS_APP_BASE_URL;
+            if (!appBaseUrl) return res.status(500).json({ error: 'Configuração ZIMDNS_APP_BASE_URL ausente no servidor' });
+
+            const bootstrapUrl = `${appBaseUrl.replace(/\/$/, '')}/api/agent/enroll?token=${raw}`;
+            const installCommand = `zimdns-agent-setup.exe /SILENT /BOOTSTRAP_URL=${bootstrapUrl}`;
+
             return res.status(200).json({
-                token_id: data.id, enrollment_token: raw, token_prefix: data.token_prefix,
-                expires_at: data.expires_at, max_uses: data.max_uses, install_command: installCommand
+                token_id: data.id, 
+                enrollment_token: raw, 
+                token_prefix: data.token_prefix,
+                expires_at: data.expires_at, 
+                max_uses: data.max_uses,
+                bootstrap_url: bootstrapUrl,
+                install_command: installCommand
             });
         }
 

@@ -31,10 +31,10 @@ jobs:
       - name: Build Agent executable
         run: |
           cd zimdns-agent
-          go build -o bin/zimdns-agent.exe ./cmd/agent
+          go build -o bin/zimdns-agent-setup.exe ./cmd/agent
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: zimdns-agent-windows
-          path: zimdns-agent/bin/zimdns-agent.exe
+          path: zimdns-agent/bin/zimdns-agent-setup.exe
