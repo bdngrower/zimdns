@@ -2,6 +2,7 @@ package utils
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -11,13 +12,27 @@ import (
 func InitLogger(debug bool) {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	
-	output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
-	if !debug {
-		// In production/windows service, we might want to log to a file or Event log
-		// but for v1, console (redirected) is fine.
+	consoleOutput := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
+	
+	var logFile *os.File
+	var err error
+	
+	logDir := ""
+	if os.Getenv("ProgramData") != "" {
+		logDir = filepath.Join(os.Getenv("ProgramData"), "ZimDNS")
+		_ = os.MkdirAll(logDir, 0755)
+		logPath := filepath.Join(logDir, "agent.log")
+		logFile, err = os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	}
 
-	log.Logger = zerolog.New(output).With().Timestamp().Logger()
+	var multi zerolog.LevelWriter
+	if err == nil && logFile != nil {
+		multi = zerolog.MultiLevelWriter(consoleOutput, logFile)
+	} else {
+		multi = zerolog.MultiLevelWriter(consoleOutput)
+	}
+
+	log.Logger = zerolog.New(multi).With().Timestamp().Logger()
 
 	if debug {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)

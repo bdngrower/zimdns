@@ -208,23 +208,51 @@ export function EnrollmentTokenModal({ clientId, onClose }: EnrollmentTokenModal
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Comando de Instalação Silenciosa</label>
+                            {/* Windows Section */}
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <div className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Windows</div>
+                                    <h5 className="text-xs font-bold text-slate-700">Instalação via PowerShell (Recomendado)</h5>
+                                </div>
                                 <div className="flex items-center gap-2 bg-slate-900 p-3 rounded-lg border border-slate-800 group relative">
                                     <code className="text-blue-400 text-xs font-mono break-all flex-1 line-clamp-3">
+                                        {`.\\${generatedToken.command}`}
+                                    </code>
+                                    <button
+                                        onClick={() => handleCopy(`.\\${generatedToken.command}`, 'ps')}
+                                        className="p-2 hover:bg-slate-800 text-slate-400 rounded-lg transition-all active:scale-95"
+                                        title="Copiar comando PowerShell"
+                                    >
+                                        {copySuccess === 'ps' ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center gap-2 mb-2 mt-4">
+                                    <div className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Windows</div>
+                                    <h5 className="text-xs font-bold text-slate-700">Instalação via Prompt (CMD)</h5>
+                                </div>
+                                <div className="flex items-center gap-2 bg-slate-900 p-3 rounded-lg border border-slate-800 group relative opacity-80">
+                                    <code className="text-blue-400 text-xs font-mono break-all flex-1 line-clamp-2">
                                         {generatedToken.command}
                                     </code>
                                     <button
                                         onClick={() => handleCopy(generatedToken.command, 'cmd')}
                                         className="p-2 hover:bg-slate-800 text-slate-400 rounded-lg transition-all active:scale-95"
-                                        title="Copiar comando"
+                                        title="Copiar comando CMD"
                                     >
                                         {copySuccess === 'cmd' ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
                                     </button>
                                 </div>
-                                <p className="text-[11px] text-slate-400 italic">
-                                    * Use este comando em scripts de deployment (GPO, MDM, PDQ Deploy).
-                                </p>
+                            </div>
+
+                            {/* Linux/Mac Section */}
+                            <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                                <div className="flex items-center justify-between opacity-50">
+                                    <div className="flex items-center gap-2">
+                                        <div className="bg-slate-200 text-slate-500 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Linux / macOS</div>
+                                        <span className="text-xs font-semibold text-slate-600">Agente Disponível em versões futuras</span>
+                                    </div>
+                                </div>
                             </div>
 
                             <button

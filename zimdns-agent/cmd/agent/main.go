@@ -1,9 +1,9 @@
 package main
 
 import (
-	"flag"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,13 +16,28 @@ import (
 )
 
 func main() {
-	bootstrapToken := flag.String("enroll", "", "Bootstrap token for first-time enrollment")
-	debug := flag.Bool("debug", false, "Enable debug logging")
-	flag.Parse()
+	var bootstrapUrl string
+	var bootstrapToken string
+	debug := false
+
+	// Manual argument parsing to support /PARAM=VAL and other formats
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(strings.ToUpper(arg), "/BOOTSTRAP_URL=") {
+			bootstrapUrl = arg[len("/BOOTSTRAP_URL="):]
+		} else if strings.HasPrefix(arg, "--bootstrap-url=") {
+			bootstrapUrl = arg[len("--bootstrap-url="):]
+		} else if strings.HasPrefix(arg, "-enroll=") {
+			bootstrapToken = arg[len("-enroll="):]
+		} else if arg == "--debug" || arg == "-debug" {
+			debug = true
+		} else if strings.ToUpper(arg) == "/SILENT" {
+			// Ignore /SILENT
+		}
+	}
 
 	// 1. Init logger
-	utils.InitLogger(*debug)
-	log.Info().Msg("ZIM DNS Agent v1 starting...")
+	utils.InitLogger(debug)
+	log.Info().Msgf("ZIM DNS Agent v1 starting (Args: %v)", os.Args)
 
 	// 2. Load/Init config
 	if _, err := config.Load(); err != nil {
@@ -30,14 +45,21 @@ func main() {
 	}
 
 	// 3. Ensure enrollment
-	// Priority: 1. Flag, 2. Env var, 3. Config (empty)
-	token := *bootstrapToken
-	if token == "" {
-		token = os.Getenv("ZIMDNS_ENROLL_TOKEN")
-	}
-
-	if err := auth.EnsureEnrolled(token); err != nil {
-		log.Fatal().Err(err).Msg("Device enrollment failed")
+	// Priority: 1. /BOOTSTRAP_URL, 2. -enroll flag, 3. Env var
+	token := bootstrapToken
+	if bootstrapUrl != "" {
+		// If bootstrapUrl is provided, we use it to enroll
+		// auth.EnsureEnrolled will extract the token and override ApiUrl if needed
+		if err := auth.EnsureEnrolled(bootstrapUrl); err != nil {
+			log.Fatal().Err(err).Msg("Device enrollment via URL failed")
+		}
+	} else {
+		if token == "" {
+			token = os.Getenv("ZIMDNS_ENROLL_TOKEN")
+		}
+		if err := auth.EnsureEnrolled(token); err != nil {
+			log.Fatal().Err(err).Msg("Device enrollment failed")
+		}
 	}
 	
 	// Refresh config after enrollment (internal state is already updated)

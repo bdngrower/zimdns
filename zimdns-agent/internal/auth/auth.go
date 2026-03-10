@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/zimdns/agent/internal/config"
 	"github.com/zimdns/agent/internal/utils"
@@ -29,25 +31,51 @@ type EnrollResponse struct {
 	} `json:"intervals"`
 }
 
-func EnsureEnrolled(bootstrapToken string) error {
+func EnsureEnrolled(input string) error {
 	cfg := config.Get()
 	if cfg.DeviceToken != "" {
-		log.Info().Msg("Device already enrolled")
+		log.Info().Msg("Device already enrolled, skipping bootstrap")
 		return nil
 	}
 
-	if bootstrapToken == "" {
+	if input == "" {
 		return fmt.Errorf("device not enrolled and no bootstrap token provided")
 	}
 
-	log.Info().Msg("Starting device enrollment...")
+	bootstrapToken := input
+	apiUrl := cfg.ApiUrl
+
+	// If input looks like a URL, parse it
+	if strings.Contains(input, "://") {
+		log.Info().Msgf("Bootstrap URL detected: %s", input)
+		u, err := url.Parse(input)
+		if err == nil {
+			// Extract token from query param
+			tokenParam := u.Query().Get("token")
+			if tokenParam != "" {
+				bootstrapToken = tokenParam
+				// Extract base API URL (e.g., https://zimdns.vercel.app from https://zimdns.vercel.app/api/agent/enroll?token=...)
+				apiUrl = fmt.Sprintf("%s://%s", u.Scheme, u.Host)
+				log.Info().Msgf("Extracted token starting with %s... and ApiUrl %s", bootstrapToken[:min(5, len(bootstrapToken))], apiUrl)
+				
+				// Update ApiUrl in config temporarily for this enrollment
+				_ = config.Update(func(c *config.AgentConfig) {
+					c.ApiUrl = apiUrl
+				})
+			}
+		}
+	} else {
+		log.Info().Msgf("Using raw bootstrap token starting with %s...", bootstrapToken[:min(5, len(bootstrapToken))])
+	}
+
+	log.Info().Msg("Starting device enrollment request...")
 
 	osName, osArch := utils.GetOSInfo()
 	reqBody := EnrollRequest{
 		EnrollmentToken: bootstrapToken,
 		Hostname:        utils.GetHostname(),
 		OsName:          osName,
-		OsVersion:       osArch, // Simplified for v1
+		OsVersion:       osArch,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -55,15 +83,19 @@ func EnsureEnrolled(bootstrapToken string) error {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/api/agent/enroll", cfg.ApiUrl)
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	endpoint := fmt.Sprintf("%s/api/agent/enroll", apiUrl)
+	log.Debug().Msgf("POST %s", endpoint)
+	
+	resp, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("enrollment request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("enrollment failed with status: %d", resp.StatusCode)
+		var errResp struct{ Error string `json:"error"` }
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		return fmt.Errorf("enrollment failed with status %d: %s", resp.StatusCode, errResp.Error)
 	}
 
 	var res EnrollResponse
@@ -71,15 +103,25 @@ func EnsureEnrolled(bootstrapToken string) error {
 		return fmt.Errorf("failed to decode enrollment response: %w", err)
 	}
 
-	// Update and save config
+	log.Info().Msgf("Enrollment successful! DeviceID: %s", res.DeviceId)
+
+	// Update and save config permanently
 	return config.Update(func(c *config.AgentConfig) {
 		c.DeviceToken = res.DeviceToken
 		c.DeviceId = res.DeviceId
 		c.DohUrl = res.DohUrl
 		c.HeartbeatSec = res.Intervals.Heartbeat
+		if c.HeartbeatSec == 0 { c.HeartbeatSec = 60 }
 		c.InventoryMin = res.Intervals.Inventory
+		if c.InventoryMin == 0 { c.InventoryMin = 60 }
 		c.TelemetryMin = res.Intervals.Telemetry
+		if c.TelemetryMin == 0 { c.TelemetryMin = 5 }
 	})
+}
+
+func min(a, b int) int {
+	if a < b { return a }
+	return b
 }
 
 func GetAuthHeader() string {
