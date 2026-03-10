@@ -25,8 +25,7 @@ func main() {
 	log.Info().Msg("ZIM DNS Agent v1 starting...")
 
 	// 2. Load/Init config
-	cfg, err := config.Load()
-	if err != nil {
+	if _, err := config.Load(); err != nil {
 		log.Fatal().Err(err).Msg("Failed to load configuration")
 	}
 
@@ -41,8 +40,7 @@ func main() {
 		log.Fatal().Err(err).Msg("Device enrollment failed")
 	}
 	
-	// Refresh config after enrollment
-	cfg = config.Get()
+	// Refresh config after enrollment (internal state is already updated)
 
 	// 4. Start DNS Stub
 	dnsServer := dns.NewServer()
