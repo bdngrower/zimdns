@@ -44,6 +44,7 @@ func SendHeartbeat(data HeartbeatPayload) error {
 }
 
 type InventoryPayload struct {
+	Hostname        string  `json:"hostname"`
 	Cpu             string  `json:"cpu"`
 	RamTotalGb      float64 `json:"ram_total_gb"`
 	DiskTotalGb     float64 `json:"disk_total_gb"`

@@ -32,7 +32,7 @@ func CollectInventory() InventoryPayload {
 	}
 
 	// Disk info (Total C: GB)
-	if out, err := exec.Command("powershell", "-NoProfile", "(Get-PSDrive C).Used + (Get-PSDrive C).Free / 1GB").Output(); err == nil {
+	if _, err := exec.Command("powershell", "-NoProfile", "(Get-PSDrive C).Used + (Get-PSDrive C).Free / 1GB").Output(); err == nil {
 		// This is simplified, just getting total size of C:
 	}
 	
