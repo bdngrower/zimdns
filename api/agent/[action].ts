@@ -125,40 +125,48 @@ async function handleEnroll(req: any, res: any) {
 
 // GET/POST /api/agent/enrollment-tokens
 async function handleEnrollmentTokens(req: any, res: any) {
+    const method = req.method?.toUpperCase();
+    if (method === 'OPTIONS') return res.status(200).end();
+
     const supabase = getServiceRoleClient();
-    if (req.method === 'GET') {
-        const { client_id } = req.query;
-        if (!client_id) return res.status(400).json({ error: 'client_id é obrigatório' });
-        const { data, error } = await supabase
-            .from('enrollment_tokens')
-            .select('*')
-            .eq('client_id', client_id)
-            .order('created_at', { ascending: false });
-        if (error) return res.status(500).json({ error: error.message });
-        return res.status(200).json({ tokens: data });
+    try {
+        if (method === 'GET') {
+            const { client_id } = req.query;
+            if (!client_id) return res.status(400).json({ error: 'client_id é obrigatório' });
+            const { data, error } = await supabase
+                .from('enrollment_tokens')
+                .select('*')
+                .eq('client_id', client_id)
+                .order('created_at', { ascending: false });
+            if (error) return res.status(500).json({ error: error.message });
+            return res.status(200).json({ tokens: data });
+        }
+
+        if (method === 'POST') {
+            const { client_id, label, client_policy_id, expires_in_hours = 24, max_uses = 1, created_by } = req.body ?? {};
+            if (!client_id) return res.status(400).json({ error: 'client_id é obrigatório' });
+            const { raw, hash, prefix } = generateToken('bt_');
+            const expiresAt = new Date(Date.now() + expires_in_hours * 60 * 60 * 1000).toISOString();
+            const { data, error } = await supabase.from('enrollment_tokens').insert({
+                client_id, token_hash: hash, token_prefix: prefix, label, client_policy_id,
+                expires_at: expiresAt, max_uses, status: 'active', created_by
+            }).select('*').single();
+
+            if (error) return res.status(500).json({ error: 'Erro ao criar token' });
+
+            const dohUrl = process.env.ZIMDNS_DOH_URL ?? '';
+            const installCommand = `zimdns-agent-setup.exe /SILENT /BOOTSTRAP_URL=${dohUrl ? dohUrl.replace('/dns-query', '') : 'https://<doh-hostname>'}/api/agent/enroll?token=${raw}`;
+            return res.status(200).json({
+                token_id: data.id, enrollment_token: raw, token_prefix: data.token_prefix,
+                expires_at: data.expires_at, max_uses: data.max_uses, install_command: installCommand
+            });
+        }
+
+        return res.status(405).json({ error: 'Method Not Allowed' });
+    } catch (err: any) {
+        console.error('[enrollment-tokens] error:', err);
+        return res.status(500).json({ error: err.message });
     }
-
-    if (req.method === 'POST') {
-        const { client_id, label, client_policy_id, expires_in_hours = 24, max_uses = 1, created_by } = req.body ?? {};
-        if (!client_id) return res.status(400).json({ error: 'client_id é obrigatório' });
-        const { raw, hash, prefix } = generateToken('bt_');
-        const expiresAt = new Date(Date.now() + expires_in_hours * 60 * 60 * 1000).toISOString();
-        const { data, error } = await supabase.from('enrollment_tokens').insert({
-            client_id, token_hash: hash, token_prefix: prefix, label, client_policy_id,
-            expires_at: expiresAt, max_uses, status: 'active', created_by
-        }).select('*').single();
-
-        if (error) return res.status(500).json({ error: 'Erro ao criar token' });
-
-        const dohUrl = process.env.ZIMDNS_DOH_URL ?? '';
-        const installCommand = `zimdns-agent-setup.exe /SILENT /BOOTSTRAP_URL=${dohUrl ? dohUrl.replace('/dns-query', '') : 'https://<doh-hostname>'}/api/agent/enroll?token=${raw}`;
-        return res.status(200).json({
-            token_id: data.id, enrollment_token: raw, token_prefix: data.token_prefix,
-            expires_at: data.expires_at, max_uses: data.max_uses, install_command: installCommand
-        });
-    }
-
-    return res.status(405).json({ error: 'Method Not Allowed' });
 }
 
 // POST /api/agent/heartbeat

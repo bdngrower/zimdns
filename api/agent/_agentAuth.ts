@@ -14,7 +14,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 
 export interface AuthenticatedDevice {
   deviceId: string;
@@ -45,7 +45,6 @@ export function sha256(value: string): string {
  * Retorna o valor raw (para o cliente) e o hash (para armazenamento).
  */
 export function generateToken(prefix: 'bt_' | 'tok_'): { raw: string; hash: string; prefix: string } {
-  const { randomBytes } = require('crypto');
   const raw = `${prefix}${randomBytes(32).toString('hex')}`;
   const hash = sha256(raw);
   return { raw, hash, prefix: raw.substring(0, 10) };
