@@ -148,12 +148,20 @@ export function DevicesTab({ clientId }: DevicesTabProps) {
                         const isRevoked = device.status === 'revoked';
                         
                         return (
-                            <div key={device.id} className={`p-4 bg-white border rounded-lg shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 ${isRevoked ? 'opacity-60 bg-slate-50' : ''}`}>
-                                <div className="flex items-start gap-4">
+                            <div key={device.id} className={`bg-white border rounded-lg shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 overflow-hidden relative group hover:border-accent transition-all ${isRevoked ? 'opacity-60 bg-slate-50' : ''}`}>
+                                {/* Link to details (whole area except actions) */}
+                                {!isRevoked && (
+                                    <Link 
+                                        to={`/clients/${clientId}/devices/${device.id}`}
+                                        className="absolute inset-0 z-0"
+                                    />
+                                )}
+                                
+                                <div className="flex items-start gap-4 p-4 relative z-10 pointer-events-none">
                                     <div className={`p-3 rounded-full ${isRevoked ? 'bg-slate-200 text-slate-500' : online ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
                                         {getDeviceIcon(device.os_name)}
                                     </div>
-                                    <div>
+                                    <div className="flex-1">
                                         <div className="flex items-center gap-2">
                                             <span className="font-semibold text-slate-900">{device.hostname}</span>
                                             {isRevoked ? (
@@ -169,30 +177,21 @@ export function DevicesTab({ clientId }: DevicesTabProps) {
                                                     Offline
                                                 </span>
                                             )}
-                                            {!isRevoked && (
-                                                <Link 
-                                                    to={`/clients/${clientId}/devices/${device.id}`}
-                                                    className="ml-2 p-1 text-slate-400 hover:text-accent transition-colors"
-                                                    title="Ver Detalhes"
-                                                >
-                                                    <Info className="h-4 w-4" />
-                                                </Link>
-                                            )}
                                         </div>
-                                        <p className="text-xs text-slate-500 mt-1 uppercase font-medium tracking-wider">
+                                        <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-wider">
                                             {device.os_name || 'Desconhecido'} {device.os_version} · v{device.agent_version || '1.0.0'}
                                         </p>
-                                        <div className="flex flex-wrap gap-3 mt-3">
-                                            <div className="flex items-center gap-1.5 text-xs text-slate-600" title="Modelo do hardware">
+                                        <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3">
+                                            <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
                                                 <HardDrive className="h-3.5 w-3.5 text-slate-400" />
                                                 {device.model || device.manufacturer || 'Genérico'}
                                             </div>
-                                            <div className="flex items-center gap-1.5 text-xs text-slate-600" title="Token de autenticação">
+                                            <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
                                                 <Shield className="h-3.5 w-3.5 text-slate-400" />
                                                 ID: {device.device_token_prefix}...
                                             </div>
                                             {device.last_seen_at && (
-                                                <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                                                <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
                                                     <Activity className="h-3.5 w-3.5 text-slate-400" />
                                                     Visto há {formatDistanceToNow(new Date(device.last_seen_at), { addSuffix: false, locale: ptBR })}
                                                 </div>
@@ -201,33 +200,42 @@ export function DevicesTab({ clientId }: DevicesTabProps) {
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col items-end gap-2">
+                                <div className="flex flex-col items-end gap-2 p-4 pt-0 md:pt-4 relative z-10">
                                     {!isRevoked && (
-                                        <button
-                                            onClick={() => handleRevoke(device.id)}
-                                            disabled={isRevoking === device.id}
-                                            className="flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors"
-                                        >
-                                            {isRevoking === device.id ? (
-                                                <RefreshCw className="h-3 w-3 animate-spin" />
-                                            ) : (
-                                                <XOctagon className="h-3 w-3" />
-                                            )}
-                                            Revogar Acesso
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <Link 
+                                                to={`/clients/${clientId}/devices/${device.id}`}
+                                                className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-accent bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-md transition-colors"
+                                            >
+                                                <Info className="h-3.5 w-3.5" />
+                                                Mais Detalhes
+                                            </Link>
+                                            <button
+                                                onClick={() => handleRevoke(device.id)}
+                                                disabled={isRevoking === device.id}
+                                                className="flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors"
+                                            >
+                                                {isRevoking === device.id ? (
+                                                    <RefreshCw className="h-3 w-3 animate-spin" />
+                                                ) : (
+                                                    <XOctagon className="h-3 w-3" />
+                                                )}
+                                                Revogar
+                                            </button>
+                                        </div>
                                     )}
 
                                     {/* Tier 3: Dados Sensíveis (Super Admin / Técnico) */}
                                     {(userRole === 'super_admin' || userRole === 'tecnico') && online && (
-                                        <div className="flex items-center gap-3 mt-1 px-3 py-1 bg-amber-50 rounded-md border border-amber-100">
-                                            <div className="flex items-center gap-1 text-[10px] text-amber-700 uppercase font-bold">
-                                                <ShieldAlert className="h-3 w-3" /> Admin View
+                                        <div className="flex items-center gap-3 mt-1 px-3 py-1 bg-amber-50 rounded-md border border-amber-100 text-amber-900">
+                                            <div className="flex items-center gap-1 text-[10px] text-amber-700 uppercase font-extrabold">
+                                                <ShieldAlert className="h-3 w-3" /> Admin
                                             </div>
-                                            <div className="flex items-center gap-1 text-[11px] text-slate-600">
-                                                <Wifi className="h-3 w-3 text-amber-500" /> SSID: <span className="font-mono">ZimOffice_Guest</span>
+                                            <div className="flex items-center gap-1 text-[11px]">
+                                                <Wifi className="h-3 w-3 text-amber-500" /> <span className="font-mono">Office_WiFi</span>
                                             </div>
-                                            <div className="flex items-center gap-1 text-[11px] text-slate-600">
-                                                <Globe className="h-3 w-3 text-amber-500" /> IP: <span className="font-mono">187.54.x.x</span>
+                                            <div className="flex items-center gap-1 text-[11px]">
+                                                <Globe className="h-3 w-3 text-amber-500" /> <span className="font-mono">189.x.x.x</span>
                                             </div>
                                         </div>
                                     )}

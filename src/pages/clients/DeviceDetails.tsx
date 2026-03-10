@@ -33,10 +33,15 @@ export function DeviceDetails() {
     async function loadData() {
         setIsLoading(true);
         
-        // 1. Load Device info
+        // 1. Load Device info with policy name
         const { data: deviceData } = await supabase
             .from('devices')
-            .select('*')
+            .select(`
+                *,
+                client_policy:client_policy_id (
+                    policy_name
+                )
+            `)
             .eq('id', deviceId)
             .single();
         
@@ -79,6 +84,9 @@ export function DeviceDetails() {
     if (isLoading) return <div className="p-8 text-center text-slate-500">Carregando detalhes do dispositivo...</div>;
     if (!device) return <div className="p-8 text-center text-red-500">Dispositivo não encontrado.</div>;
 
+    const latestHB = heartbeats[0];
+    const online = latestHB && (new Date().getTime() - new Date(latestHB.received_at).getTime()) / 1000 < 120;
+
     return (
         <div className="p-8 max-w-7xl mx-auto">
             <Link to={`/clients/${clientId}`} className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-blue-600 mb-6 group">
@@ -87,25 +95,64 @@ export function DeviceDetails() {
             </Link>
 
             <div className="bg-white border rounded-xl shadow-sm overflow-hidden mb-8">
-                <div className="p-6 border-b bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-white border rounded-lg shadow-sm">
-                            <Shield className="h-6 w-6 text-accent" />
+                <div className="p-6 border-b bg-slate-50/50 flex flex-col md:flex-row md:items-start justify-between gap-6">
+                    <div className="flex items-start gap-4">
+                        <div className="p-4 bg-white border rounded-xl shadow-sm">
+                            <Shield className={`h-8 w-8 ${online ? 'text-green-500' : 'text-slate-400'}`} />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-bold text-slate-900">{device.hostname}</h1>
-                            <p className="text-sm text-slate-500">{device.os_name} {device.os_version} · hardware_id: {device.hardware_id || '—'}</p>
+                            <div className="flex items-center gap-3">
+                                <h1 className="text-2xl font-bold text-slate-900">{device.hostname}</h1>
+                                {online ? (
+                                    <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-bold text-green-700 ring-1 ring-inset ring-green-600/20">
+                                        ONLINE
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600 ring-1 ring-inset ring-slate-500/10">
+                                        OFFLINE
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-sm text-slate-500 mt-1">
+                                {device.os_name} {device.os_version} · Hardware ID: <span className="font-mono text-slate-700">{device.hardware_id || '—'}</span>
+                            </p>
+                            
+                            <div className="flex flex-wrap gap-4 mt-4">
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] text-slate-400 uppercase font-black tracking-tighter">Política Aplicada</span>
+                                    <span className="text-sm font-semibold text-accent flex items-center gap-1.5">
+                                        <LayoutDashboard className="h-3.5 w-3.5" />
+                                        {(device as any).client_policy?.policy_name || 'Política Padrão'}
+                                    </span>
+                                </div>
+                                <div className="w-px h-8 bg-slate-200 hidden md:block" />
+                                {online && latestHB && (
+                                    <>
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-slate-400 uppercase font-black tracking-tighter">IP Público</span>
+                                            <span className="text-sm font-mono text-slate-700">{latestHB.public_ip || '—'}</span>
+                                        </div>
+                                        <div className="w-px h-8 bg-slate-200 hidden md:block" />
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-slate-400 uppercase font-black tracking-tighter">Rede Atual</span>
+                                            <span className="text-sm font-semibold text-slate-700">{latestHB.network_ssid || latestHB.network_type || 'Desconhecida'}</span>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold uppercase tracking-widest border ${device.status === 'active' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-red-50 text-red-700 border-red-100'}`}>
-                            {device.status}
-                        </span>
+                    
+                    <div className="flex flex-col items-end gap-2 shrink-0">
                         <div className="text-right">
-                            <p className="text-[10px] text-slate-400 uppercase font-bold">Visto por último</p>
-                            <p className="text-sm font-medium text-slate-700">
+                            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Último Heartbeat</p>
+                            <p className="text-sm font-medium text-slate-900">
                                 {device.last_seen_at ? formatDistanceToNow(new Date(device.last_seen_at), { addSuffix: true, locale: ptBR }) : 'Nunca'}
                             </p>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                             <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                             <span className="text-[10px] font-bold text-slate-400 uppercase">Agent v{device.agent_version || '1.0.0'}</span>
                         </div>
                     </div>
                 </div>
@@ -166,14 +213,39 @@ export function DeviceDetails() {
                                     <HardDrive className="h-5 w-5 text-slate-400" />
                                     <h3 className="font-bold text-slate-900">Armazenamento</h3>
                                 </div>
-                                <div className="space-y-3">
+                                <div className="space-y-4">
                                     <div>
-                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Capacidade Total</p>
-                                        <p className="text-sm text-slate-700">{snapshot?.disk_total_gb ? `${snapshot.disk_total_gb} GB` : '—'}</p>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Capacidade & Uso</p>
+                                            <p className="text-[10px] font-bold text-slate-700">
+                                                {snapshot?.disk_total_gb && snapshot?.disk_free_gb 
+                                                    ? `${(snapshot.disk_total_gb - snapshot.disk_free_gb).toFixed(1)}GB / ${snapshot.disk_total_gb}GB` 
+                                                    : '—'}
+                                            </p>
+                                        </div>
+                                        <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+                                            <div 
+                                                className={`h-full rounded-full transition-all duration-1000 ${
+                                                    snapshot && snapshot.disk_total_gb && snapshot.disk_free_gb && ((snapshot.disk_total_gb - snapshot.disk_free_gb) / snapshot.disk_total_gb) > 0.85 
+                                                        ? 'bg-red-500' 
+                                                        : 'bg-accent'
+                                                }`} 
+                                                style={{ 
+                                                    width: snapshot && snapshot.disk_total_gb && snapshot.disk_free_gb 
+                                                        ? `${Math.min(100, ((snapshot.disk_total_gb - snapshot.disk_free_gb) / snapshot.disk_total_gb) * 100)}%` 
+                                                        : '0%' 
+                                                }} 
+                                            />
+                                        </div>
+                                        {snapshot && snapshot.disk_total_gb && snapshot.disk_free_gb && (
+                                            <p className="text-[10px] text-slate-400 mt-1 text-right">
+                                                {((snapshot.disk_total_gb - snapshot.disk_free_gb) / snapshot.disk_total_gb * 100).toFixed(0)}% ocupado
+                                            </p>
+                                        )}
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Espaço Livre</p>
-                                        <p className="text-sm text-slate-700">{snapshot?.disk_free_gb ? `${snapshot.disk_free_gb} GB` : '—'}</p>
+                                        <p className="text-sm text-green-600 font-semibold">{snapshot?.disk_free_gb ? `${snapshot.disk_free_gb} GB` : '—'}</p>
                                     </div>
                                 </div>
                             </div>

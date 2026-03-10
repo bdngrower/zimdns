@@ -62,69 +62,113 @@ export default async function handler(req: any, res: any) {
         }
 
         // ---------------------------------------------------------------
-        // PASSO 1: Buscar policies ativas do cliente
+        // PASSO 1: Sincronizar Persistent Client (operação pontual)
         // ---------------------------------------------------------------
-        const { data: policiesData, error: polErr } = await supabase
+        const { data: triggerClient, error: triggerClientErr } = await supabase
+            .from('clients')
+            .select('id, name')
+            .eq('id', clientId)
+            .single();
+
+        if (triggerClient) {
+            try {
+                await syncAdGuardClient(triggerClient.id, triggerClient.name, adguardConfig);
+                console.log(`[AdGuard Sync] Trigger point client synced: ${triggerClient.id}`);
+            } catch (err: any) {
+                console.error(`[AdGuard Sync] Failed to sync trigger client: ${err.message}`);
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // PASSO 2: Buscar serviços e domínios do catálogo
+        // ---------------------------------------------------------------
+        const { data: servicesData, error: srvErr } = await supabase
+            .from('service_catalog')
+            .select(`
+                name,
+                category,
+                service_domains (
+                    domain
+                )
+            `);
+        
+        if (srvErr) throw new Error("Erro ao buscar catálogo de serviços: " + srvErr.message);
+
+        // ---------------------------------------------------------------
+        // PASSO 3: Buscar TODAS as políticas ativas de TODOS os clientes
+        // ---------------------------------------------------------------
+        const { data: allPolicies, error: polErr } = await supabase
             .from('client_policies')
-            .select('*')
-            .eq('client_id', clientId)
+            .select('client_id, policy_name')
             .eq('enabled', true);
 
-        if (polErr) throw new Error("Erro ao buscar políticas: " + polErr.message);
+        if (polErr) throw new Error("Erro ao buscar políticas globais: " + polErr.message);
 
         // ---------------------------------------------------------------
-        // PASSO 2: Buscar domínios do catálogo para as policies ativas
+        // PASSO 4: Buscar TODAS as regras manuais de TODOS os clientes
         // ---------------------------------------------------------------
-        let catalogRules: string[] = [];
-        if (policiesData && policiesData.length > 0) {
-            const { data: servicesData, error: srvErr } = await supabase
-                .from('service_catalog')
-                .select(`
-                    name,
-                    service_domains (
-                        domain
-                    )
-                `);
+        const { data: allManualRules, error: manErr } = await supabase
+            .from('manual_rules')
+            .select('client_id, domain, type')
+            .eq('is_active', true);
 
-            if (!srvErr && servicesData) {
-                for (const svc of servicesData) {
-                    const matchingPolicyByName = policiesData.find(p => p.policy_name === svc.name);
-                    const matchingPolicyByCategory = policiesData.find(p => p.policy_name === (svc as any).category);
+        if (manErr) throw new Error("Erro ao buscar regras manuais globais: " + manErr.message);
 
-                    if (matchingPolicyByName || matchingPolicyByCategory) {
-                        const domains = (svc as any).service_domains?.map((d: any) => d.domain) || [];
-                        domains.forEach((d: string) => {
-                            catalogRules.push(`||${d}^`);
-                        });
+        // ---------------------------------------------------------------
+        // PASSO 5: Construir o Mapa de Regras (Multi-tenancy via $client)
+        // ---------------------------------------------------------------
+        
+        // Estrutura: rule_string -> Set of client_tags
+        const ruleToClients = new Map<string, Set<string>>();
+
+        // 1. Processar políticas do catálogo
+        if (allPolicies && servicesData) {
+            for (const policy of allPolicies) {
+                const clientTag = toAdGuardClientId(policy.client_id);
+                
+                // Encontrar serviços que correspondem a essa política (por nome ou categoria)
+                const matchingServices = servicesData.filter(s => 
+                    s.name === policy.policy_name || s.category === policy.policy_name
+                );
+
+                for (const svc of matchingServices) {
+                    const domains = (svc as any).service_domains?.map((d: any) => d.domain) || [];
+                    for (const domain of domains) {
+                        const ruleBase = `||${domain}^`;
+                        if (!ruleToClients.has(ruleBase)) {
+                            ruleToClients.set(ruleBase, new Set());
+                        }
+                        ruleToClients.get(ruleBase)!.add(clientTag);
                     }
                 }
             }
         }
 
-        // ---------------------------------------------------------------
-        // PASSO 3: Buscar Regras Manuais (Block e Allow)
-        // ---------------------------------------------------------------
-        const { data: manualData, error: manErr } = await supabase
-            .from('manual_rules')
-            .select('*')
-            .eq('client_id', clientId)
-            .eq('is_active', true);
-
-        if (manErr) console.warn("Erro ao buscar regras manuais, prosseguindo sem elas...", manErr.message);
-
-        let finalRulesSet = new Set(catalogRules);
-
-        if (manualData) {
-            manualData.forEach(mr => {
-                const adgRule = mr.type === 'allow' ? `@@||${mr.domain}^` : `||${mr.domain}^`;
-                finalRulesSet.add(adgRule);
-            });
+        // 2. Processar regras manuais
+        if (allManualRules) {
+            for (const rule of allManualRules) {
+                const clientTag = toAdGuardClientId(rule.client_id);
+                const prefix = rule.type === 'allow' ? '@@' : '';
+                const ruleBase = `${prefix}||${rule.domain}^`;
+                
+                if (!ruleToClients.has(ruleBase)) {
+                    ruleToClients.set(ruleBase, new Set());
+                }
+                ruleToClients.get(ruleBase)!.add(clientTag);
+            }
         }
 
-        const effectiveRules = Array.from(finalRulesSet);
+        // ---------------------------------------------------------------
+        // PASSO 6: Gerar a lista final de regras formatadas para o AdGuard
+        // ---------------------------------------------------------------
+        const effectiveRules: string[] = [];
+        for (const [ruleBase, clientTags] of ruleToClients.entries()) {
+            const tags = Array.from(clientTags).join(',');
+            effectiveRules.push(`${ruleBase}$client=${tags}`);
+        }
 
         // ---------------------------------------------------------------
-        // PASSO 4: Enviar regras ao AdGuard
+        // PASSO 7: Enviar regras ao AdGuard (Sobrescreve tudo)
         // ---------------------------------------------------------------
         const token = Buffer.from(
             `${process.env.ADGUARD_USERNAME}:${process.env.ADGUARD_PASSWORD}`
@@ -148,38 +192,34 @@ export default async function handler(req: any, res: any) {
         }
 
         // ---------------------------------------------------------------
-        // PASSO 5: Pós-validação
+        // PASSO 8: Pós-validação e Log
         // ---------------------------------------------------------------
         const checkRes = await fetch(`${adguardConfig.adguardUrl}/control/filtering/status`, {
             headers: { 'Authorization': authHeader }
         });
         const checkData = await checkRes.json();
-        const activeRules = checkData.user_rules || [];
+        const serverRules = checkData.user_rules || [];
 
-        const missingRules = effectiveRules.filter((r: unknown) => typeof r === 'string' && !activeRules.includes(r));
-        let finalStatusMsg = 'Aplicações validadas no AdGuard com sucesso!';
+        const missingRules = effectiveRules.filter(r => !serverRules.includes(r));
+        let finalStatusMsg = 'Aplicações sincronizadas globalmente com $client para multi-tenancy.';
         let statusDb = 'success';
 
         if (missingRules.length > 0) {
-            finalStatusMsg = `Aviso: ${missingRules.length} regras não constam como ativas na validação do motor.`;
+            finalStatusMsg = `Aviso: Sincronismo global incompleto (${missingRules.length} falhas).`;
             statusDb = 'warning';
         }
 
-        // ---------------------------------------------------------------
-        // PASSO 6: Atualizar status do client e gravar log de sync
-        // ---------------------------------------------------------------
         const now = new Date().toISOString();
-
         const responsePayload = {
-            adguard_client_id: adguardClientId,
-            set_rules_status: agRes.status,
+            total_global_rules: effectiveRules.length,
+            status: agRes.status,
             validation: {
                 applied: effectiveRules.length - missingRules.length,
                 missing: missingRules.length
-            },
-            missing_examples: missingRules.slice(0, 3)
+            }
         };
 
+        // Atualizar status apenas para o cliente que disparou (ou talvez todos? por enquanto manter trigger)
         await supabase.from('clients').update({
             sync_status: statusDb,
             last_sync_at: now,
