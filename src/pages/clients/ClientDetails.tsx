@@ -9,6 +9,9 @@ import { ManualRules } from './ManualRules';
 import { BlockPageSettings } from './BlockPageSettings';
 import { NetworkOrigins } from './NetworkOrigins';
 import { DnsLogs } from './DnsLogs';
+import { DevicesTab } from './DevicesTab';
+import { EnrollmentTokenModal } from './EnrollmentTokenModal';
+import { Laptop } from 'lucide-react';
 
 function SyncStatusBadge({ syncStatus }: { syncStatus?: string }) {
     const config = {
@@ -38,6 +41,13 @@ export function ClientDetails() {
     const [syncLogs, setSyncLogs] = useState<any[]>([]);
     const [dnsActivity, setDnsActivity] = useState<any>(null);
     const [isLoadingActivity, setIsLoadingActivity] = useState(true);
+    const [isEnrollmentModalOpen, setIsEnrollmentModalOpen] = useState(false);
+
+    useEffect(() => {
+        const handleOpenModal = () => setIsEnrollmentModalOpen(true);
+        window.addEventListener('open-enrollment-modal', handleOpenModal);
+        return () => window.removeEventListener('open-enrollment-modal', handleOpenModal);
+    }, []);
 
     async function loadClient() {
         if (!id) return;
@@ -113,6 +123,7 @@ export function ClientDetails() {
         { id: 'dashboard', name: 'Visão Geral', icon: Zap },
         { id: 'blocks', name: 'Políticas de Bloqueio', icon: ShieldAlert },
         { id: 'network', name: 'Origens de Rede', icon: Network },
+        { id: 'devices', name: 'Agentes / Devices', icon: Laptop },
         { id: 'dns_logs', name: 'Consultas DNS', icon: Activity },
         { id: 'rules', name: 'Regras Manuais', icon: List },
         { id: 'blockpage', name: 'Página de Bloqueio', icon: Paintbrush },
@@ -367,6 +378,12 @@ export function ClientDetails() {
                     </div>
                 )}
 
+                {activeTab === 'devices' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <DevicesTab clientId={client.id} />
+                    </div>
+                )}
+
                 {activeTab === 'rules' && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                         <ManualRules clientId={client.id} />
@@ -379,6 +396,13 @@ export function ClientDetails() {
                     </div>
                 )}
             </div>
+
+            {isEnrollmentModalOpen && client && (
+                <EnrollmentTokenModal 
+                    clientId={client.id} 
+                    onClose={() => setIsEnrollmentModalOpen(false)} 
+                />
+            )}
         </div>
     );
 }

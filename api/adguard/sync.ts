@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
+import { syncAdGuardClient, getAdGuardConfig, toAdGuardClientId } from './_adguardClient';
 
 // Vercel Severless route para forçar trigger de sincronização de regras de 1 cliente.
+// Estendido com sincronização do AdGuard Persistent Client (ClientID para uso no DoH Proxy).
 export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
@@ -13,9 +15,8 @@ export default async function handler(req: any, res: any) {
 
     let supabase;
     const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
-    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || ''; // Em prod use SERVICE_ROLE_KEY pra bypassar RLS
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 
-    // Fallback pra contornar missing envs em dev test mode
     if (!supabaseUrl || !supabaseKey) {
         console.warn("Vercel (Backend): Variáveis VITE_SUPABASE_* ausentes localmente.");
         return res.status(500).json({ success: false, message: 'Faltam váriaveis de ambiente do Supabase.' });
@@ -25,13 +26,44 @@ export default async function handler(req: any, res: any) {
         supabase = createClient(supabaseUrl, supabaseKey);
         const startedAt = new Date().toISOString();
 
-        const adguardUrl = process.env.ADGUARD_API_URL;
-        const adguardUser = process.env.ADGUARD_USERNAME;
-        const adguardPass = process.env.ADGUARD_PASSWORD;
+        const adguardConfig = getAdGuardConfig();
 
-        if (!adguardUrl) throw new Error("ADGUARD_API_URL não configurado");
+        // ---------------------------------------------------------------
+        // PASSO 0: Sincronizar o Persistent Client no AdGuard Home
+        //
+        // Garante que o client do ZIM DNS tenha um ClientID estável
+        // registrado no AdGuard, used pelo DoH Proxy no path da URL:
+        //   http://<adguard-interno>/dns-query/<adguard_client_id>
+        //
+        // adguard_client_id = "zimdns-" + client_uuid_sem_hifens
+        // Operação idempotente: cria ou atualiza conforme necessário.
+        // ---------------------------------------------------------------
 
-        // 1. Buscar status atual das policies do cliente
+        // Buscar o nome do client para uso no label do AdGuard
+        const { data: clientData, error: clientErr } = await supabase
+            .from('clients')
+            .select('id, name')
+            .eq('id', clientId)
+            .single();
+
+        if (clientErr || !clientData) {
+            throw new Error(`Client não encontrado: ${clientErr?.message || 'null'}`);
+        }
+
+        let adguardClientId: string;
+        try {
+            adguardClientId = await syncAdGuardClient(clientData.id, clientData.name, adguardConfig);
+            console.log(`[AdGuard Sync] Persistent Client sincronizado: ${adguardClientId}`);
+        } catch (clientSyncErr: any) {
+            // Falha no sync do client NÃO deve bloquear o sync de regras —
+            // logar e continuar. O próximo sync tentará novamente.
+            console.error(`[AdGuard Sync] Falha ao sincronizar Persistent Client: ${clientSyncErr.message}`);
+            adguardClientId = toAdGuardClientId(clientId); // usar o slug calculado mesmo sem confirmação
+        }
+
+        // ---------------------------------------------------------------
+        // PASSO 1: Buscar policies ativas do cliente
+        // ---------------------------------------------------------------
         const { data: policiesData, error: polErr } = await supabase
             .from('client_policies')
             .select('*')
@@ -40,10 +72,11 @@ export default async function handler(req: any, res: any) {
 
         if (polErr) throw new Error("Erro ao buscar políticas: " + polErr.message);
 
-        // 2. Buscar domínios dessas policies do catálogo
+        // ---------------------------------------------------------------
+        // PASSO 2: Buscar domínios do catálogo para as policies ativas
+        // ---------------------------------------------------------------
         let catalogRules: string[] = [];
         if (policiesData && policiesData.length > 0) {
-            const policyNames = policiesData.map(p => p.policy_name);
             const { data: servicesData, error: srvErr } = await supabase
                 .from('service_catalog')
                 .select(`
@@ -55,9 +88,6 @@ export default async function handler(req: any, res: any) {
 
             if (!srvErr && servicesData) {
                 for (const svc of servicesData) {
-                    // Match pela categoria abstrata pedida nos switches ("IA", "Streaming", "Redes Sociais", etc)
-                    // Ou pelo match do nome. Simplificando: O Painel manda toggles nomeados de forma hardcoded (ex: "OpenAI / ChatGPT")
-                    // Como no toggle o UX envia 'IA', 'Redes sociais' - vamos usar o campo "category" da tabela service_catalog para dar match
                     const matchingPolicyByName = policiesData.find(p => p.policy_name === svc.name);
                     const matchingPolicyByCategory = policiesData.find(p => p.policy_name === (svc as any).category);
 
@@ -71,7 +101,9 @@ export default async function handler(req: any, res: any) {
             }
         }
 
-        // 3. Buscar Regras Manuais (Block e Allow)
+        // ---------------------------------------------------------------
+        // PASSO 3: Buscar Regras Manuais (Block e Allow)
+        // ---------------------------------------------------------------
         const { data: manualData, error: manErr } = await supabase
             .from('manual_rules')
             .select('*')
@@ -84,7 +116,6 @@ export default async function handler(req: any, res: any) {
 
         if (manualData) {
             manualData.forEach(mr => {
-                // Formatação AdGuard: allow é @@||domain.com^ e block é ||domain.com^
                 const adgRule = mr.type === 'allow' ? `@@||${mr.domain}^` : `||${mr.domain}^`;
                 finalRulesSet.add(adgRule);
             });
@@ -92,17 +123,20 @@ export default async function handler(req: any, res: any) {
 
         const effectiveRules = Array.from(finalRulesSet);
 
-        // 4. Enviar regras pro AdGuard usando o endpoint correto de SET
-        const token = Buffer.from(`${adguardUser}:${adguardPass}`).toString('base64');
+        // ---------------------------------------------------------------
+        // PASSO 4: Enviar regras ao AdGuard
+        // ---------------------------------------------------------------
+        const token = Buffer.from(
+            `${process.env.ADGUARD_USERNAME}:${process.env.ADGUARD_PASSWORD}`
+        ).toString('base64');
+        const authHeader = `Basic ${token}`;
 
-        const payload = {
-            rules: effectiveRules
-        };
+        const payload = { rules: effectiveRules };
 
-        const agRes = await fetch(`${adguardUrl}/control/filtering/set_rules`, {
+        const agRes = await fetch(`${adguardConfig.adguardUrl}/control/filtering/set_rules`, {
             method: 'POST',
             headers: {
-                'Authorization': `Basic ${token}`,
+                'Authorization': authHeader,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(payload)
@@ -113,27 +147,31 @@ export default async function handler(req: any, res: any) {
             throw new Error(`Falha API Adguard (HTTP ${agRes.status}): ${agErrorTxt}`);
         }
 
-        // Pós-validação: GET /control/filtering/status para verificar se a aplicação pegou as regras
-        const checkRes = await fetch(`${adguardUrl}/control/filtering/status`, {
-            headers: { 'Authorization': `Basic ${token}` }
+        // ---------------------------------------------------------------
+        // PASSO 5: Pós-validação
+        // ---------------------------------------------------------------
+        const checkRes = await fetch(`${adguardConfig.adguardUrl}/control/filtering/status`, {
+            headers: { 'Authorization': authHeader }
         });
         const checkData = await checkRes.json();
         const activeRules = checkData.user_rules || [];
 
-        // Verifica se as enviadas estão presentes nas rules globais (considerando o modelo MVP atual de regras adguard)
         const missingRules = effectiveRules.filter((r: unknown) => typeof r === 'string' && !activeRules.includes(r));
         let finalStatusMsg = 'Aplicações validadas no AdGuard com sucesso!';
         let statusDb = 'success';
 
         if (missingRules.length > 0) {
-            finalStatusMsg = `Aviso: Request OK, mas ${missingRules.length} regras não constam como ativas na validação do motor.`;
+            finalStatusMsg = `Aviso: ${missingRules.length} regras não constam como ativas na validação do motor.`;
             statusDb = 'warning';
         }
 
-        // 5. Atualizar sucesso no client
+        // ---------------------------------------------------------------
+        // PASSO 6: Atualizar status do client e gravar log de sync
+        // ---------------------------------------------------------------
         const now = new Date().toISOString();
 
         const responsePayload = {
+            adguard_client_id: adguardClientId,
             set_rules_status: agRes.status,
             validation: {
                 applied: effectiveRules.length - missingRules.length,
@@ -148,7 +186,6 @@ export default async function handler(req: any, res: any) {
             sync_error_message: statusDb === 'warning' ? finalStatusMsg : null
         }).eq('id', clientId);
 
-        // Grava no Log
         await supabase.from('sync_logs').insert({
             client_id: clientId,
             request_payload: payload,
@@ -163,6 +200,7 @@ export default async function handler(req: any, res: any) {
             success: true,
             warning: statusDb === 'warning',
             rulesCount: effectiveRules.length,
+            adguardClientId,
             message: finalStatusMsg
         });
 
@@ -172,7 +210,6 @@ export default async function handler(req: any, res: any) {
         const now = new Date().toISOString();
         const errMsg = error?.message || 'Erro desconhecido ao comunicar com AdGuard';
 
-        // Atualizar falha no client
         if (supabase) {
             await supabase.from('clients').update({
                 sync_status: 'error',
@@ -180,11 +217,10 @@ export default async function handler(req: any, res: any) {
                 last_sync_at: now
             }).eq('id', clientId);
 
-            // Grava Log Erro
             await supabase.from('sync_logs').insert({
                 client_id: clientId,
                 status: 'error',
-                started_at: now, // Simplificado, já que no catch podemos ter perdido o fluxo,
+                started_at: now,
                 finished_at: now,
                 error_message: errMsg
             });

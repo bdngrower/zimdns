@@ -14,6 +14,7 @@ import { Dashboard } from './pages/Dashboard';
 import { ClientList } from './pages/clients/ClientList';
 import { ClientDetails } from './pages/clients/ClientDetails';
 import { ClientForm } from './pages/clients/ClientForm';
+import { DeviceDetails } from './pages/clients/DeviceDetails';
 import { ServiceCatalog } from './pages/catalog/ServiceCatalog';
 import { Reports } from './pages/reports/Reports';
 import { Settings } from './pages/Settings';
@@ -142,6 +143,7 @@ function App() {
             <Route path="/clients/new" element={<ClientForm />} />
             <Route path="/clients/:id/edit" element={<ClientForm />} />
             <Route path="/clients/:id" element={<ClientDetails />} />
+            <Route path="/clients/:clientId/devices/:deviceId" element={<DeviceDetails />} />
             <Route path="/catalog/services" element={<ServiceCatalog />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />
