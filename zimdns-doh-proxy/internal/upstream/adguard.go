@@ -26,10 +26,10 @@ func NewResolver(adguardURL string) *Resolver {
 
 // Resolve forwards the DoH request to AdGuard Home using the ClientID mechanism.
 // URL format: http://<adguard>/dns-query/<clientid>
-func (r *Resolver) Resolve(ctx context.Context, clientID string, payload []byte, contentType string) ([]byte, string, error) {
-	// 1. Construct target URL with ClientID
-	// Format: zimdns-{uuid_no_hifens}
-	adguardClientID := "zimdns-" + strings.ReplaceAll(clientID, "-", "")
+func (r *Resolver) Resolve(ctx context.Context, deviceID string, payload []byte, contentType string) ([]byte, string, error) {
+	// 1. Construct target URL with DeviceID
+	// Format: zimdns-dev-{uuid_no_hifens}
+	adguardClientID := "zimdns-dev-" + strings.ReplaceAll(deviceID, "-", "")
 	url := fmt.Sprintf("%s/dns-query/%s", r.adguardURL, adguardClientID)
 
 	// 2. Prepare request

@@ -120,6 +120,14 @@ func (s *Server) forwardToDoH(url string, data []byte) ([]byte, error) {
 	}
 	req.Header.Set("Content-Type", "application/dns-message")
 	req.Header.Set("Accept", "application/dns-message")
+	
+	s.mu.RLock()
+	deviceToken := config.Get().DeviceToken
+	s.mu.RUnlock()
+	
+	if deviceToken != "" {
+		req.Header.Set("Authorization", "Bearer "+deviceToken)
+	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {

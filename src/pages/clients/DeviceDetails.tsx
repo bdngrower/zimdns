@@ -249,19 +249,17 @@ export function DeviceDetails() {
 
         if (telData) setTelemetry(telData);
 
-        // ── DNS events (correlacionados por client_id) ────────────────────────
-        if (deviceData?.client_id) {
-            const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-            const { data: dnsData } = await supabase
-                .from('dns_events')
-                .select('id, timestamp, client_id, domain, query_type, action, rule, source_ip')
-                .eq('client_id', deviceData.client_id)
-                .gte('timestamp', since24h)
-                .order('timestamp', { ascending: false })
-                .limit(200);
+        // ── DNS events (filtrados por device_id) ────────────────────────────
+        const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { data: dnsData } = await supabase
+            .from('dns_events')
+            .select('id, timestamp, client_id, domain, query_type, action, rule, source_ip, device_id')
+            .eq('device_id', deviceId)
+            .gte('timestamp', since24h)
+            .order('timestamp', { ascending: false })
+            .limit(200);
 
-            if (dnsData) setDnsEvents(dnsData);
-        }
+        if (dnsData) setDnsEvents(dnsData);
 
         setIsLoading(false);
     }
@@ -568,12 +566,11 @@ export function DeviceDetails() {
                                 </div>
                             </div>
 
-                            {/* aviso v1.1 */}
+                            {/* info de atividade */}
                             <div className="flex gap-3 p-4 rounded-xl bg-blue-50 border border-blue-100">
                                 <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
                                 <p className="text-sm text-blue-800 leading-relaxed">
-                                    <strong>Nota v1.0:</strong> Os logs de consultas DNS por dispositivo estão disponíveis por ClientID na aba{' '}
-                                    <em>Consultas DNS</em> do cliente. A correlação por device individual chegará na v1.1.
+                                    <strong>Atividade DNS:</strong> Exibindo consultas realizadas especificamente por este dispositivo nas últimas 24 horas.
                                 </p>
                             </div>
                         </div>
@@ -641,7 +638,7 @@ export function DeviceDetails() {
                                 <EmptyState
                                     icon={<DatabaseZap className="h-8 w-8" />}
                                     title="Nenhuma atividade DNS recente"
-                                    message="Ainda não há registros DNS das últimas 24 horas para este dispositivo. A atividade aparecerá aqui assim que o agente começar a encaminhar consultas."
+                                    message="Apenas o tráfego em 'Agent Mode' é correlacionado a este endpoint. Se o dispositivo estiver em 'Network Mode' ou for um registro legado, os logs não aparecerão nesta aba específica."
                                 />
                             ) : dnsFiltered.length === 0 ? (
                                 <EmptyState
@@ -701,9 +698,8 @@ export function DeviceDetails() {
                             <div className="flex gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200">
                                 <Info className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
                                 <p className="text-xs text-slate-500 leading-relaxed">
-                                    <strong className="text-slate-600">Correlação por ClientID:</strong>{' '}
-                                    Nesta versão, a atividade DNS é correlacionada pelo identificador do cliente.
-                                    Se houver múltiplos dispositivos compartilhando o mesmo perfil de cliente, esta visão pode incluir tráfego de mais de um dispositivo.
+                                    <strong className="text-slate-600">Precisão de Logs:</strong>{' '}
+                                    Esta visão utiliza o identificador único do agente (DeviceID) para garantir que apenas o tráfego deste dispositivo seja exibido.
                                 </p>
                             </div>
                         </div>
@@ -740,12 +736,18 @@ export function DeviceDetails() {
                                         </div>
                                         <div className="space-y-3">
                                             <div>
-                                                <MiniLabel>CPU</MiniLabel>
+                                                <MiniLabel>Processador</MiniLabel>
                                                 <p className="text-sm text-slate-700 truncate">{snapshot.cpu || '—'}</p>
                                             </div>
                                             <div>
                                                 <MiniLabel>Arquitetura</MiniLabel>
-                                                <p className="text-sm text-slate-700">{snapshot.architecture || '—'}</p>
+                                                <p className="text-sm text-slate-700 font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded w-fit">{snapshot.architecture || '—'}</p>
+                                            </div>
+                                            <div>
+                                                <MiniLabel>Sistema Operacional</MiniLabel>
+                                                <p className="text-sm text-slate-700">
+                                                    {(snapshot.os_name || device.os_name) || '—'} {(snapshot.os_version || device.os_version) || ''}
+                                                </p>
                                             </div>
                                         </div>
                                     </div>
@@ -764,12 +766,14 @@ export function DeviceDetails() {
                                                 </p>
                                             </div>
                                             <div>
-                                                <MiniLabel>Fabricante</MiniLabel>
-                                                <p className="text-sm text-slate-700">{snapshot.manufacturer || '—'}</p>
+                                                <MiniLabel>Hardware</MiniLabel>
+                                                <p className="text-sm text-slate-700">
+                                                    {snapshot.manufacturer || '—'} · {snapshot.model || '—'}
+                                                </p>
                                             </div>
                                             <div>
-                                                <MiniLabel>Modelo</MiniLabel>
-                                                <p className="text-sm text-slate-700">{snapshot.model || '—'}</p>
+                                                <MiniLabel>ID do Hardware</MiniLabel>
+                                                <p className="text-[10px] font-mono text-slate-500 break-all">{snapshot.hardware_id || '—'}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -810,6 +814,32 @@ export function DeviceDetails() {
                                         })() : (
                                             <p className="text-sm text-slate-400">Dados não disponíveis</p>
                                         )}
+                                    </div>
+
+                                    {/* Rede & Agente */}
+                                    <div className="p-5 bg-slate-50 rounded-xl border border-slate-100 space-y-4">
+                                        <div className="flex items-center gap-2 text-slate-700">
+                                            <Globe className="h-4 w-4 text-slate-400" />
+                                            <h3 className="font-bold text-sm">Rede & Agente</h3>
+                                        </div>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <MiniLabel>IP Público</MiniLabel>
+                                                <p className="text-sm font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded w-fit">
+                                                    {heartbeats[0]?.public_ip || '—'}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <MiniLabel>Versão do Agente</MiniLabel>
+                                                <p className="text-sm text-slate-700">
+                                                    {snapshot?.agent_version || device.agent_version || '—'}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <MiniLabel>Hostname</MiniLabel>
+                                                <p className="text-sm text-slate-700 truncate">{snapshot?.hostname || device.hostname || '—'}</p>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             )}

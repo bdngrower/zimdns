@@ -98,7 +98,7 @@ func main() {
 		defer cancel()
 
 		upstreamStart := time.Now()
-		respBody, respContentType, err := resolver.Resolve(ctx, device.ClientID, body, contentType)
+		respBody, respContentType, err := resolver.Resolve(ctx, device.ID, body, contentType)
 		metrics.UpstreamLatency.Observe(float64(time.Since(upstreamStart).Milliseconds()))
 
 		if err != nil {

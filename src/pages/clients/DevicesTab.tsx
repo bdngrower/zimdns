@@ -98,7 +98,16 @@ export function DevicesTab({ clientId }: DevicesTabProps) {
 
     const isOnline = (lastSeenAt: string | undefined) => {
         if (!lastSeenAt) return false;
-        const lastSeen = new Date(lastSeenAt);
+        // Garante a conversão para UTC caso o Supabase retorne sem Z
+        const dateStr = lastSeenAt.endsWith('Z') 
+            ? lastSeenAt 
+            : `${lastSeenAt.replace(' ', 'T')}${lastSeenAt.includes('T') ? '' : 'Z'}`;
+        // Para ser ainda mais seguro caso venha '2024-10-10T10:00:00' sem Z:
+        const finalStr = dateStr.endsWith('Z') || dateStr.includes('+') || dateStr.includes('-') 
+            ? dateStr 
+            : `${dateStr}Z`;
+            
+        const lastSeen = new Date(finalStr);
         const diff = (new Date().getTime() - lastSeen.getTime()) / 1000;
         return diff < 120; // 2 minutos
     };

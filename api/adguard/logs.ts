@@ -93,10 +93,21 @@ export default async function handler(req: any, res: any) {
             return clientStr.trim();
         };
 
+        // Helper para extrair o device_id de tags tipo zimdns-dev-<uuid>
+        const extractDeviceId = (clientStr: string) => {
+            if (!clientStr) return null;
+            const match = clientStr.match(/zimdns-dev-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+            return match ? match[1] : null;
+        };
+
         const isClientMatch = (log: any, ips: Set<string>) => {
             const clientFieldValue = log.client || '';
             const clientIpFieldValue = log.client_ip || '';
             const extractedIp = extractIp(clientFieldValue);
+            const taggedDeviceId = extractDeviceId(clientFieldValue);
+
+            // Se tiver device_id tagueado, ja é um match imediato (veio do nosso proxy)
+            if (taggedDeviceId) return true;
 
             for (const validIp of Array.from(ips)) {
                 if (
@@ -113,7 +124,7 @@ export default async function handler(req: any, res: any) {
 
         // Objeto para Tracking explícito do Frontend
         const _debug: any = {
-            buildTag: "debug-logs-v4",
+            buildTag: "debug-logs-v3-devid",
             clientId,
             sourceTableUsed: "client_networks",
             networkRowsFound: networks ? networks.length : 0,
@@ -121,29 +132,28 @@ export default async function handler(req: any, res: any) {
             dbError: netErr ? (netErr as any).message || netErr : null,
             registeredOrigins: Array.from(validIps),
             rawLogCount: allLogs.length,
-            rawSample: allLogs.slice(0, 3), // Pegar as tres primeiras pra printar na tela caso queiramos.
+            rawSample: allLogs.slice(0, 3), 
             parsedIps: allLogs.slice(0, 10).map((l: any) => extractIp(l.client || '')),
             matchedCount: 0
         };
 
         if (allLogs.length > 0) {
-            console.log("🟢 ZIM DNS Debug - RAW QUERYLOG SAMPLE (Logs API):", JSON.stringify(allLogs[0], null, 2));
-            console.log(" IPs Validos do Cliente:", Array.from(validIps).join(', '));
+            console.log("🟢 ZIM DNS Debug - RAW QUERYLOG SAMPLE:", JSON.stringify(allLogs[0], null, 2));
         }
 
-        // Filtrar apenas originados pelos IPs do cliente atual
+        // Filtrar apenas originados pelos IPs do cliente atual ou que tenham tag do ZimDNS
         const filteredLogs = allLogs.filter((log: any) => isClientMatch(log, validIps));
 
         _debug.matchedCount = filteredLogs.length;
 
-        console.log(` Matches encontrados: ${filteredLogs.length} / ${allLogs.length}`);
-
         // Padronizar a resposta para garantir que o front-end sempre encontre o Domínio
         const formattedLogs = filteredLogs.map((log: any) => {
+            const devId = extractDeviceId(log.client || '');
             return {
                 ...log,
                 queriedDomain: log.question?.host || log.question?.name || log.question?.qname || log.host || 'Desconhecido',
-                queryType: log.question?.type || '-'
+                queryType: log.question?.type || '-',
+                deviceId: devId
             };
         });
 
@@ -163,23 +173,22 @@ export default async function handler(req: any, res: any) {
 
             let totalQueriesToCount = 0;
             let totalBlockedToCount = 0;
-            const logDateRaw = new Date().toISOString().split('T')[0]; // Current UTC date
+            const logDateRaw = new Date().toISOString().split('T')[0];
 
             const dbEvents = formattedLogs.map((log: any) => {
-                const timestamp = log.time; // O AdGuard já retorna em ISO 8601 string
+                const timestamp = log.time;
                 const domain = log.queriedDomain;
                 const source_ip = extractIp(log.client_ip || log.client || '');
                 const client_id = clientId;
+                const device_id = log.deviceId || null;
 
                 const action = log.reason === 'NotFiltered' || log.reason === '' ? 'processed' : 'blocked';
 
-                // Aggregation logic
                 totalQueriesToCount++;
                 if (action === 'blocked') totalBlockedToCount++;
 
-                // Hash única do evento
                 const event_hash = crypto.createHash('sha256')
-                    .update(`${timestamp}-${domain}-${source_ip}-${client_id}`)
+                    .update(`${timestamp}-${domain}-${source_ip}-${client_id}-${device_id || 'none'}`)
                     .digest('hex');
 
                 return {
@@ -191,9 +200,10 @@ export default async function handler(req: any, res: any) {
                     rule: log.rule || log.reason || null,
                     source_ip,
                     latency_ms: Math.round(parseFloat(log.elapsedMs || 0)),
-                    event_hash
+                    event_hash,
+                    device_id
                 };
-            }).filter((ev: any) => ev.action === 'blocked' || ev.rule !== null); // Filter out pure 'allowed'/processed events without rules
+            }).filter((ev: any) => ev.action === 'blocked' || ev.rule !== null);
 
             ingestionDebug.eventsPrepared = dbEvents.length;
 
@@ -203,7 +213,6 @@ export default async function handler(req: any, res: any) {
             if (dbEvents.length > 0) {
                 ingestionDebug.attempted = true;
 
-                // Bulk insert no Supabase com "on conflict do nothing"
                 const { data: insertedData, error: ingestErr } = await supabaseAdmin
                     .from('dns_events')
                     .upsert(dbEvents, { onConflict: 'event_hash', ignoreDuplicates: true })
@@ -214,7 +223,6 @@ export default async function handler(req: any, res: any) {
                     ingestionDebug.errors.push(ingestErr);
                 } else {
                     ingestionDebug.insertedCount = insertedData ? insertedData.length : 0;
-                    console.log(`🟢 ZIM DNS Telemetry Ingestion Success: ${ingestionDebug.insertedCount} novos registros de segurança salvos.`);
                 }
             }
 

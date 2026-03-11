@@ -8,34 +8,53 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// SetSystemDNS define o DNS do sistema para 127.0.53.1 usando PowerShell para interfaces ativas.
 func SetSystemDNS() error {
 	script := `
-$interfaces = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceAlias -notmatch 'vEthernet|Loopback|Virtual' }
-foreach ($iface in $interfaces) {
-    Set-DnsClientServerAddress -InterfaceIndex $iface.ifIndex -ServerAddresses "127.0.53.1"
+$ErrorActionPreference = 'Stop'
+try {
+    $interfaces = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceAlias -notmatch 'vEthernet|Loopback|Virtual' }
+    if ($null -eq $interfaces -or $interfaces.Count -eq 0) {
+        Write-Warning "No valid network interfaces found."
+        exit 0
+    }
+    foreach ($iface in $interfaces) {
+        Set-DnsClientServerAddress -InterfaceIndex $iface.ifIndex -ServerAddresses "127.0.53.1"
+    }
+} catch {
+    Write-Error $_.Exception.Message
+    exit 1
 }
 `
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	if err := cmd.Run(); err != nil {
-		log.Error().Err(err).Msg("Falha ao definir o DNS do sistema")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Error().Err(err).Str("output", string(out)).Msg("Falha ao definir o DNS do sistema")
 		return err
 	}
-	log.Info().Msg("DNS do sistema definido para 127.0.53.1")
+	log.Info().Msg("DNS do sistema definido para 127.0.53.1 nas interfaces ativas")
 	return nil
 }
 
-// RestoreSystemDNS reseta as configurações de DNS do sistema (voltar para DHCP / padrão).
 func RestoreSystemDNS() error {
 	script := `
-$interfaces = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceAlias -notmatch 'vEthernet|Loopback|Virtual' }
-foreach ($iface in $interfaces) {
-    Set-DnsClientServerAddress -InterfaceIndex $iface.ifIndex -ResetServerAddresses
+$ErrorActionPreference = 'Stop'
+try {
+    $interfaces = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceAlias -notmatch 'vEthernet|Loopback|Virtual' }
+    if ($null -eq $interfaces -or $interfaces.Count -eq 0) {
+        exit 0
+    }
+    foreach ($iface in $interfaces) {
+        Set-DnsClientServerAddress -InterfaceIndex $iface.ifIndex -ResetServerAddresses
+    }
+} catch {
+    Write-Error $_.Exception.Message
+    exit 1
 }
 `
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	if err := cmd.Run(); err != nil {
-		log.Error().Err(err).Msg("Falha ao restaurar o DNS do sistema")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Error().Err(err).Str("output", string(out)).Msg("Falha ao restaurar o DNS do sistema")
 		return err
 	}
 	log.Info().Msg("DNS do sistema restaurado com sucesso")

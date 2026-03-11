@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ShieldAlert, ShieldCheck, Search, Loader2 } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, Search, Loader2, Laptop } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 interface DnsLogsProps {
     clientId: string;
@@ -7,6 +8,7 @@ interface DnsLogsProps {
 
 export function DnsLogs({ clientId }: DnsLogsProps) {
     const [logs, setLogs] = useState<any[]>([]);
+    const [devices, setDevices] = useState<{ id: string, hostname: string }[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchQuery] = useState('');
@@ -28,6 +30,16 @@ export function DnsLogs({ clientId }: DnsLogsProps) {
             setError(null);
 
             try {
+                // Fetch devices first for mapping
+                const { data: devicesData } = await supabase
+                    .from('devices')
+                    .select('id, hostname')
+                    .eq('client_id', clientId);
+                
+                if (devicesData) {
+                    setDevices(devicesData);
+                }
+
                 const res = await fetch(`/api/adguard/logs?clientId=${clientId}`, { cache: 'no-store' });
                 const data = await res.json();
 
@@ -131,7 +143,7 @@ export function DnsLogs({ clientId }: DnsLogsProps) {
                                 <th className="px-4 py-3 font-medium text-slate-500 text-left">Domínio Consultado</th>
                                 <th className="px-4 py-3 font-medium text-slate-500 text-left">Status (Ação)</th>
                                 <th className="px-4 py-3 font-medium text-slate-500 text-left">Motivo / Regra Base</th>
-                                <th className="px-4 py-3 font-medium text-slate-500 text-left">IP de Origem</th>
+                                <th className="px-4 py-3 font-medium text-slate-500 text-left">Dispositivo / Origem</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -181,7 +193,15 @@ export function DnsLogs({ clientId }: DnsLogsProps) {
                                             )}
                                         </td>
                                         <td className="px-4 py-3 text-slate-500">
-                                            {log.client}
+                                            {log.deviceId ? (
+                                                <div className="flex items-center gap-1.5 font-medium text-slate-900">
+                                                    <Laptop className="h-3.5 w-3.5 text-blue-500" />
+                                                    {devices.find(d => d.id === log.deviceId)?.hostname || 'Dispositivo Desconhecido'}
+                                                    <span className="text-[10px] text-slate-400 font-normal">({log.client})</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-slate-600">{log.client}</span>
+                                            )}
                                         </td>
                                     </tr>
                                 );

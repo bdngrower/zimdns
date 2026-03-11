@@ -43,6 +43,14 @@ func (p *program) run() {
 		log.Error().Err(err).Msg("Failed to start DNS stub in service")
 		return
 	}
+
+	// 2.5 Wait for DNS Stub to be ready (Readiness Check)
+	if err := utils.WaitForPort("tcp", "127.0.53.1:53", 5*time.Second); err != nil {
+		log.Error().Err(err).Msg("DNS stub readiness check failed. Aborting startup.")
+		p.dnsServer.Stop()
+		return
+	}
+	log.Info().Msg("DNS stub readiness check passed.")
 	
 	if err := dns.SetSystemDNS(); err != nil {
 		log.Warn().Err(err).Msg("Could not set system DNS override. Local DNS traffic might bypass proxy.")
@@ -193,6 +201,13 @@ func runForeground() {
 	if err := dnsServer.Start("127.0.53.1:53"); err != nil {
 		log.Fatal().Err(err).Msg("Failed to start DNS stub")
 	}
+
+	// Wait for DNS Stub to be ready
+	if err := utils.WaitForPort("tcp", "127.0.53.1:53", 5*time.Second); err != nil {
+		dnsServer.Stop()
+		log.Fatal().Err(err).Msg("DNS stub readiness check failed")
+	}
+	log.Info().Msg("DNS stub readiness check passed.")
 
 	if err := dns.SetSystemDNS(); err != nil {
 		log.Warn().Err(err).Msg("Could not set system DNS override.")

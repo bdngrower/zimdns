@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -37,4 +39,19 @@ func GetPublicIP() string {
 	}
 
 	return cachedPublicIP // retorna o último IP válido caso falhe, ou string vazia
+}
+
+// WaitForPort tenta conectar a um endereço de rede (ex: "tcp", "127.0.53.1:53")
+// repetidamente até o timeout ou sucesso. Serve como readiness check.
+func WaitForPort(network, addr string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout(network, addr, 500*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout waiting for %s %s to become available", network, addr)
 }

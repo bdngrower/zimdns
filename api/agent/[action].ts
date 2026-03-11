@@ -35,10 +35,10 @@ async function handleConfig(req: any, res: any) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
     const supabase = getServiceRoleClient();
     try {
-        await authenticateDevice(req, supabase);
+        const device = await authenticateDevice(req, supabase);
         return res.status(200).json({
             revoked: false,
-            doh_url: process.env.ZIMDNS_DOH_URL ?? '',
+            doh_url: `${(process.env.ZIMDNS_DOH_URL ?? '').replace(/\/+$/, '')}/dns-query`,
             heartbeat_interval_seconds: 60,
             inventory_interval_seconds: 3600,
             config_poll_interval_seconds: 300,
@@ -114,7 +114,7 @@ async function handleEnroll(req: any, res: any) {
         return res.status(200).json({
             device_id: device.id,
             device_token: deviceTokenRaw,
-            doh_url: process.env.ZIMDNS_DOH_URL ?? '',
+            doh_url: `${(process.env.ZIMDNS_DOH_URL ?? '').replace(/\/+$/, '')}/dns-query`,
             heartbeat_interval_seconds: 60,
             inventory_interval_seconds: 3600,
             config_poll_interval_seconds: 300,
