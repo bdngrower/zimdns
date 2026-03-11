@@ -19,19 +19,33 @@ import {
     Globe,
     Clock,
     CheckCircle,
+    CheckCircle2,
     XCircle,
     AlertTriangle,
     Server,
-    Radio,
     Bug,
-    HeartPulse,
     Package,
+    List,
+    Filter,
+    DatabaseZap,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 // ── tipos de tab ─────────────────────────────────────────────────────────────
-type ActiveTab = 'overview' | 'agent-health' | 'inventory' | 'diagnostics';
+type ActiveTab = 'overview' | 'dns-activity' | 'inventory' | 'diagnostics';
+type DnsFilter = 'all' | 'blocked' | 'allowed';
+
+interface DnsEvent {
+    id: string;
+    timestamp: string;
+    client_id: string;
+    domain: string;
+    query_type?: string;
+    action: string;
+    rule?: string;
+    source_ip?: string;
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 function parseSupabaseDate(dateStr: string): Date {
@@ -182,6 +196,8 @@ export function DeviceDetails() {
     const [snapshot, setSnapshot] = useState<DeviceInventorySnapshot | null>(null);
     const [heartbeats, setHeartbeats] = useState<DeviceHeartbeat[]>([]);
     const [telemetry, setTelemetry] = useState<DeviceTelemetryEvent[]>([]);
+    const [dnsEvents, setDnsEvents] = useState<DnsEvent[]>([]);
+    const [dnsFilter, setDnsFilter] = useState<DnsFilter>('all');
     const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
     const [isLoading, setIsLoading] = useState(true);
 
@@ -233,6 +249,20 @@ export function DeviceDetails() {
 
         if (telData) setTelemetry(telData);
 
+        // ── DNS events (correlacionados por client_id) ────────────────────────
+        if (deviceData?.client_id) {
+            const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const { data: dnsData } = await supabase
+                .from('dns_events')
+                .select('id, timestamp, client_id, domain, query_type, action, rule, source_ip')
+                .eq('client_id', deviceData.client_id)
+                .gte('timestamp', since24h)
+                .order('timestamp', { ascending: false })
+                .limit(200);
+
+            if (dnsData) setDnsEvents(dnsData);
+        }
+
         setIsLoading(false);
     }
 
@@ -268,9 +298,16 @@ export function DeviceDetails() {
         : 'Nunca';
 
     // ── tabs ─────────────────────────────────────────────────────────────────
+    // ── derivados de DNS ──────────────────────────────────────────────────────
+    const dnsBlocked = dnsEvents.filter(e => e.action === 'blocked');
+    const dnsAllowed = dnsEvents.filter(e => e.action !== 'blocked');
+    const dnsFiltered = dnsFilter === 'blocked' ? dnsBlocked : dnsFilter === 'allowed' ? dnsAllowed : dnsEvents;
+    const lastDnsActivity = dnsEvents[0]?.timestamp ?? null;
+    const lastBlock = dnsBlocked[0]?.timestamp ?? null;
+
     const tabs: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
         { id: 'overview', label: 'Visão Geral', icon: <LayoutDashboard className="h-4 w-4" /> },
-        { id: 'agent-health', label: 'Saúde do Agente', icon: <HeartPulse className="h-4 w-4" /> },
+        { id: 'dns-activity', label: 'Atividade DNS', icon: <Activity className="h-4 w-4" /> },
         { id: 'inventory', label: 'Inventário', icon: <Package className="h-4 w-4" /> },
         { id: 'diagnostics', label: 'Diagnóstico', icon: <Bug className="h-4 w-4" /> },
     ];
@@ -457,6 +494,11 @@ export function DeviceDetails() {
                                         {telemetry.length}
                                     </span>
                                 )}
+                                {tab.id === 'dns-activity' && dnsBlocked.length > 0 && (
+                                    <span className="ml-1 rounded-full bg-red-100 text-red-700 text-[10px] font-bold px-1.5 py-0.5">
+                                        {dnsBlocked.length}
+                                    </span>
+                                )}
                             </button>
                         ))}
                     </nav>
@@ -537,85 +579,133 @@ export function DeviceDetails() {
                         </div>
                     )}
 
-                    {/* ── Saúde do Agente ── */}
-                    {activeTab === 'agent-health' && (
-                        <div>
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                                    <HeartPulse className="h-4 w-4 text-blue-500" />
-                                    Sinais de Vida do Agente
-                                </h2>
-                                <span className="text-xs text-slate-400">{heartbeats.length} registros recentes</span>
+                    {/* ── Atividade DNS ── */}
+                    {activeTab === 'dns-activity' && (
+                        <div className="space-y-5">
+
+                            {/* mini-cards de resumo */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div className="p-4 rounded-xl border bg-slate-50 space-y-0.5">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Última Atividade</p>
+                                    <p className="text-sm font-semibold text-slate-800">
+                                        {lastDnsActivity
+                                            ? formatDistanceToNow(new Date(lastDnsActivity), { addSuffix: true, locale: ptBR })
+                                            : '—'}
+                                    </p>
+                                </div>
+                                <div className="p-4 rounded-xl border bg-slate-50 space-y-0.5">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Consultas (24h)</p>
+                                    <p className="text-sm font-semibold text-slate-800">{dnsEvents.length}</p>
+                                </div>
+                                <div className="p-4 rounded-xl border bg-red-50 border-red-100 space-y-0.5">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-red-400">Bloqueios (24h)</p>
+                                    <p className="text-sm font-semibold text-red-700">{dnsBlocked.length}</p>
+                                </div>
+                                <div className="p-4 rounded-xl border bg-slate-50 space-y-0.5">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Último Bloqueio</p>
+                                    <p className="text-sm font-semibold text-slate-800">
+                                        {lastBlock
+                                            ? formatDistanceToNow(new Date(lastBlock), { addSuffix: true, locale: ptBR })
+                                            : '—'}
+                                    </p>
+                                </div>
                             </div>
 
-                            {heartbeats.length === 0 ? (
+                            {/* filtros */}
+                            <div className="flex items-center gap-2">
+                                <Filter className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                {(['all', 'blocked', 'allowed'] as DnsFilter[]).map(f => (
+                                    <button
+                                        key={f}
+                                        onClick={() => setDnsFilter(f)}
+                                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                                            dnsFilter === f
+                                                ? f === 'blocked'
+                                                    ? 'bg-red-100 text-red-700'
+                                                    : f === 'allowed'
+                                                        ? 'bg-emerald-100 text-emerald-700'
+                                                        : 'bg-blue-100 text-blue-700'
+                                                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                        }`}
+                                    >
+                                        {f === 'all' ? 'Todos' : f === 'blocked' ? 'Bloqueados' : 'Permitidos'}
+                                        <span className="ml-1 opacity-60">
+                                            ({f === 'all' ? dnsEvents.length : f === 'blocked' ? dnsBlocked.length : dnsAllowed.length})
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* tabela ou empty state */}
+                            {dnsEvents.length === 0 ? (
                                 <EmptyState
-                                    icon={<Radio className="h-8 w-8" />}
-                                    title="Nenhum heartbeat recebido"
-                                    message="O agente ainda não enviou sinais de vida. Verifique se ele está rodando e se a conexão com o servidor está ativa."
+                                    icon={<DatabaseZap className="h-8 w-8" />}
+                                    title="Nenhuma atividade DNS recente"
+                                    message="Ainda não há registros DNS das últimas 24 horas para este dispositivo. A atividade aparecerá aqui assim que o agente começar a encaminhar consultas."
+                                />
+                            ) : dnsFiltered.length === 0 ? (
+                                <EmptyState
+                                    icon={<List className="h-8 w-8" />}
+                                    title="Nenhum registro neste filtro"
+                                    message="Não há eventos correspondentes ao filtro selecionado no período de 24 horas."
                                 />
                             ) : (
                                 <div className="border rounded-xl overflow-hidden">
                                     <table className="min-w-full divide-y divide-slate-100 text-sm">
                                         <thead className="bg-slate-50">
                                             <tr>
-                                                {['Latência DoH', 'Stub DNS', 'Rede / SSID', 'IP Público', 'Recebido em'].map(h => (
-                                                    <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                                        {h}
-                                                    </th>
+                                                {['Horário', 'Domínio', 'Ação', 'Motivo'].map(h => (
+                                                    <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500">{h}</th>
                                                 ))}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {heartbeats.map((hb, i) => (
-                                                <tr key={hb.id ?? i} className="hover:bg-slate-50/80 transition-colors">
-                                                    {/* DoH Latency */}
-                                                    <td className="px-4 py-3">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`h-2 w-2 rounded-full shrink-0 ${hb.doh_ok ? 'bg-emerald-500' : 'bg-red-400'}`} />
-                                                            <span className="font-medium text-slate-800">
-                                                                {hb.doh_latency_ms != null ? `${hb.doh_latency_ms} ms` : '—'}
-                                                            </span>
-                                                            {!hb.doh_ok && (
-                                                                <span className="text-[10px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded">FAIL</span>
+                                            {dnsFiltered.map((ev, i) => {
+                                                const isBlocked = ev.action === 'blocked';
+                                                return (
+                                                    <tr key={ev.id ?? i} className="hover:bg-slate-50/80 transition-colors">
+                                                        <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                                                            <div>{format(new Date(ev.timestamp), "dd/MM · HH:mm:ss", { locale: ptBR })}</div>
+                                                            <div className="text-slate-400">{formatDistanceToNow(new Date(ev.timestamp), { addSuffix: true, locale: ptBR })}</div>
+                                                        </td>
+                                                        <td className="px-4 py-3 font-mono text-xs text-slate-800 max-w-[220px]">
+                                                            <span className="truncate block" title={ev.domain}>{ev.domain}</span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            {isBlocked ? (
+                                                                <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 border border-rose-200/60">
+                                                                    <ShieldAlert className="h-3 w-3" /> Bloqueado
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200/60">
+                                                                    <CheckCircle2 className="h-3 w-3" /> Permitido
+                                                                </span>
                                                             )}
-                                                        </div>
-                                                    </td>
-                                                    {/* Stub */}
-                                                    <td className="px-4 py-3">
-                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                                                            hb.dns_stub_ok
-                                                                ? 'bg-emerald-100 text-emerald-700'
-                                                                : 'bg-red-100 text-red-700'
-                                                        }`}>
-                                                            {hb.dns_stub_ok
-                                                                ? <><CheckCircle className="h-3 w-3" /> OK</>
-                                                                : <><XCircle className="h-3 w-3" /> FAIL</>
-                                                            }
-                                                        </span>
-                                                    </td>
-                                                    {/* Rede */}
-                                                    <td className="px-4 py-3">
-                                                        <span className="flex items-center gap-1.5 text-slate-700 font-mono text-xs">
-                                                            <Wifi className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                            {hb.network_ssid || hb.network_type || '—'}
-                                                        </span>
-                                                    </td>
-                                                    {/* IP */}
-                                                    <td className="px-4 py-3 font-mono text-xs text-slate-600">
-                                                        {hb.public_ip || <span className="text-slate-400">—</span>}
-                                                    </td>
-                                                    {/* Timestamp */}
-                                                    <td className="px-4 py-3 text-slate-500 text-xs">
-                                                        <div>{format(parseSupabaseDate(hb.received_at), "dd/MM · HH:mm:ss", { locale: ptBR })}</div>
-                                                        <div className="text-slate-400">{formatDistanceToNow(parseSupabaseDate(hb.received_at), { addSuffix: true, locale: ptBR })}</div>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-xs text-slate-500 max-w-[180px]">
+                                                            {ev.rule ? (
+                                                                <span className="truncate block" title={ev.rule}>{ev.rule}</span>
+                                                            ) : (
+                                                                <span className="text-slate-300">—</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
                             )}
+
+                            {/* nota de correlação */}
+                            <div className="flex gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                                <Info className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                                <p className="text-xs text-slate-500 leading-relaxed">
+                                    <strong className="text-slate-600">Correlação por ClientID:</strong>{' '}
+                                    Nesta versão, a atividade DNS é correlacionada pelo identificador do cliente.
+                                    Se houver múltiplos dispositivos compartilhando o mesmo perfil de cliente, esta visão pode incluir tráfego de mais de um dispositivo.
+                                </p>
+                            </div>
                         </div>
                     )}
 
@@ -690,7 +780,7 @@ export function DeviceDetails() {
                                             <HardDrive className="h-4 w-4 text-slate-400" />
                                             <h3 className="font-bold text-sm">Armazenamento</h3>
                                         </div>
-                                        {snapshot.disk_total_gb && snapshot.disk_free_gb ? (() => {
+                                        {(snapshot.disk_total_gb != null && snapshot.disk_free_gb != null) ? (() => {
                                             const used = snapshot.disk_total_gb - snapshot.disk_free_gb;
                                             const pct = (used / snapshot.disk_total_gb) * 100;
                                             const barColor = pct > 85 ? 'bg-red-500' : pct > 65 ? 'bg-amber-400' : 'bg-emerald-500';
