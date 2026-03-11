@@ -10,6 +10,10 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Missing clientId' });
     }
 
+    // Declara variável para controle de lock
+    let lockAcquired = false;
+    const startedAt = new Date().toISOString();
+
     let supabase;
     const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
     const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
@@ -20,6 +24,29 @@ export default async function handler(req: any, res: any) {
 
     try {
         supabase = createClient(supabaseUrl, supabaseKey);
+
+        // ---------------------------------------------------------------
+        // PASSO 0: Adquirir Lock Atômico para Ingestão de Logs (ID 2)
+        // ---------------------------------------------------------------
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { data: lockData, error: lockErr } = await supabase
+            .from('sync_state')
+            .update({ is_running: true, started_at: startedAt })
+            .eq('id', 2)
+            .or(`is_running.eq.false,started_at.lt.${fiveMinutesAgo}`)
+            .select();
+
+        if (lockErr) {
+            console.error("Erro ao adquirir lock de logs:", lockErr);
+            return res.status(500).json({ success: false, message: 'Erro interno ao verificar concorrência de logs.' });
+        }
+
+        if (!lockData || lockData.length === 0) {
+            console.warn(`[AdGuard Logs] Ingestão já está em execução. Abortando request para client ${clientId}.`);
+            return res.status(409).json({ success: false, message: 'logs ingestion already running' });
+        }
+
+        lockAcquired = true;
 
         const adguardUrl = process.env.ADGUARD_API_URL;
         const adguardUser = process.env.ADGUARD_USERNAME;
@@ -37,7 +64,7 @@ export default async function handler(req: any, res: any) {
 
         const validIps = new Set<string>();
         if (networks) {
-            networks.forEach(n => {
+            networks.forEach((n: any) => {
                 if (n.type === 'ip' && n.value) validIps.add(n.value);
                 if (n.type === 'dyndns' && n.resolved_ip) validIps.add(n.resolved_ip);
             });
@@ -228,6 +255,7 @@ export default async function handler(req: any, res: any) {
 
             // Daily Stats Aggregation Upsert (sempre executado se houver fluxo lido do adguard)
             if (totalQueriesToCount > 0) {
+                // LOCK PROTECTS AGAINST RACE CONDITIONS HERE
                 // To avoid massive reads on the supabase side, we use an RPC or direct upsert if constraints are met.
                 // Since Supabase REST doesn't easily allow "increment existing row" dynamically without RPC on simple upserts,
                 // the safest pattern from a Serverless function is read -> add -> write OR rely on Postgres RPC.
@@ -283,5 +311,13 @@ export default async function handler(req: any, res: any) {
                 stepFailed: "exception_catch"
             }
         });
+    } finally {
+        if (supabase && lockAcquired) {
+            await supabase
+                .from('sync_state')
+                .update({ is_running: false, started_at: null })
+                .eq('id', 2);
+            console.log(`[AdGuard Logs] Ingestion Lock (ID 2) released.`);
+        }
     }
 }
