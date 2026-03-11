@@ -110,6 +110,7 @@ export interface Device {
     notes?: string;
     created_at: string;
     updated_at: string;
+    device_heartbeats?: DeviceHeartbeat[];
 }
 
 export interface DeviceHeartbeat {

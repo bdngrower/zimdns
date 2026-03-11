@@ -230,7 +230,7 @@ export default async function handler(req: any, res: any) {
                     event_hash,
                     device_id
                 };
-            }).filter((ev: any) => ev.action === 'blocked' || ev.rule !== null);
+            }).filter((ev: any) => ev.client_id !== null); // Mantemos todos, inclusive 'processed', para estatísticas precisas
 
             ingestionDebug.eventsPrepared = dbEvents.length;
 
@@ -249,39 +249,37 @@ export default async function handler(req: any, res: any) {
                     console.error("🔴 ZIM DNS Telemetry Ingestion Error:", ingestErr);
                     ingestionDebug.errors.push(ingestErr);
                 } else {
+                    // Aqui está o segredo: insertedData contém APENAS os registros que não foram ignorados (novos)
                     ingestionDebug.insertedCount = insertedData ? insertedData.length : 0;
-                }
-            }
 
-            // Daily Stats Aggregation Upsert (sempre executado se houver fluxo lido do adguard)
-            if (totalQueriesToCount > 0) {
-                // LOCK PROTECTS AGAINST RACE CONDITIONS HERE
-                // To avoid massive reads on the supabase side, we use an RPC or direct upsert if constraints are met.
-                // Since Supabase REST doesn't easily allow "increment existing row" dynamically without RPC on simple upserts,
-                // the safest pattern from a Serverless function is read -> add -> write OR rely on Postgres RPC.
-                // As a fallback MVP we will use standard upsert if RPC is unavailable, but here we can just call an RPC for increment or do a read/add.
+                    // Calculamos o real delta de queries total e blocked vindo de NOVOS registros
+                    const newQueriesCount = insertedData ? insertedData.length : 0;
+                    const newBlockedCount = insertedData ? insertedData.filter((d: any) => d.action === 'blocked').length : 0;
 
-                // Fetch first:
-                const { data: existingStat } = await supabaseAdmin
-                    .from('dns_stats_daily')
-                    .select('id, queries_total, blocked_total')
-                    .eq('client_id', clientId)
-                    .eq('date', logDateRaw)
-                    .maybeSingle();
+                    // 2. Daily Stats Aggregation Upsert (apenas se houver novos dados)
+                    if (newQueriesCount > 0) {
+                        const { data: existingStat } = await supabaseAdmin
+                            .from('dns_stats_daily')
+                            .select('id, queries_total, blocked_total')
+                            .eq('client_id', clientId)
+                            .eq('date', logDateRaw)
+                            .maybeSingle();
 
-                const upsertStat = {
-                    client_id: clientId,
-                    date: logDateRaw,
-                    queries_total: (existingStat?.queries_total || 0) + totalQueriesToCount,
-                    blocked_total: (existingStat?.blocked_total || 0) + totalBlockedToCount
-                };
+                        const upsertStat = {
+                            client_id: clientId,
+                            date: logDateRaw,
+                            queries_total: (existingStat?.queries_total || 0) + newQueriesCount,
+                            blocked_total: (existingStat?.blocked_total || 0) + newBlockedCount
+                        };
 
-                const { error: statErr } = await supabaseAdmin
-                    .from('dns_stats_daily')
-                    .upsert(upsertStat, { onConflict: 'client_id, date' });
+                        const { error: statErr } = await supabaseAdmin
+                            .from('dns_stats_daily')
+                            .upsert(upsertStat, { onConflict: 'client_id, date' });
 
-                if (statErr) {
-                    console.error("🔴 ZIM DNS Daily Stats Update Error:", statErr);
+                        if (statErr) {
+                            console.error("🔴 ZIM DNS Daily Stats Update Error:", statErr);
+                        }
+                    }
                 }
             }
 

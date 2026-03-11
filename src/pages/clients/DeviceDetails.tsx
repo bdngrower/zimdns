@@ -784,7 +784,7 @@ export function DeviceDetails() {
                                             <HardDrive className="h-4 w-4 text-slate-400" />
                                             <h3 className="font-bold text-sm">Armazenamento</h3>
                                         </div>
-                                        {(snapshot.disk_total_gb != null && snapshot.disk_free_gb != null) ? (() => {
+                                        {(snapshot.disk_total_gb != null && snapshot.disk_total_gb > 0 && snapshot.disk_free_gb != null) ? (() => {
                                             const used = snapshot.disk_total_gb - snapshot.disk_free_gb;
                                             const pct = (used / snapshot.disk_total_gb) * 100;
                                             const barColor = pct > 85 ? 'bg-red-500' : pct > 65 ? 'bg-amber-400' : 'bg-emerald-500';

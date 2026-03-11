@@ -54,14 +54,25 @@ export function DevicesTab({ clientId }: DevicesTabProps) {
     async function loadDevices() {
         const { data, error } = await supabase
             .from('devices')
-            .select('*')
+            .select(`
+                *,
+                device_heartbeats (
+                    network_type,
+                    network_ssid,
+                    public_ip,
+                    received_at
+                )
+            `)
             .eq('client_id', clientId)
-            .order('last_seen_at', { ascending: false });
+            .neq('status', 'revoked')
+            .order('last_seen_at', { ascending: false })
+            .order('received_at', { foreignTable: 'device_heartbeats', ascending: false })
+            .limit(1, { foreignTable: 'device_heartbeats' });
 
         if (error) {
             console.error('[DevicesTab] loadDevices error:', error);
         } else if (data) {
-            setDevices(data);
+            setDevices(data as Device[]);
         }
         setIsLoading(false);
     }
@@ -241,10 +252,10 @@ export function DevicesTab({ clientId }: DevicesTabProps) {
                                                 <ShieldAlert className="h-3 w-3" /> Admin
                                             </div>
                                             <div className="flex items-center gap-1 text-[11px]">
-                                                <Wifi className="h-3 w-3 text-amber-500" /> <span className="font-mono">Office_WiFi</span>
+                                                <Wifi className="h-3 w-3 text-amber-500" /> <span className="font-mono">{device.device_heartbeats?.[0]?.network_ssid || 'Desconhecida'}</span>
                                             </div>
                                             <div className="flex items-center gap-1 text-[11px]">
-                                                <Globe className="h-3 w-3 text-amber-500" /> <span className="font-mono">189.x.x.x</span>
+                                                <Globe className="h-3 w-3 text-amber-500" /> <span className="font-mono">{device.device_heartbeats?.[0]?.public_ip || 'Desconhecido'}</span>
                                             </div>
                                         </div>
                                     )}
